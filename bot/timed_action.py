@@ -1,7 +1,12 @@
+""" Module for implementing functionality periodically within some time period
+
+"""
 import time
 from .action import Action, BadInputError
 
 class TimedAction(Action):
+    """ Action class for repeating actions
+    """
     @property
     def name(self):
         return 'timing actions'
@@ -18,36 +23,67 @@ class TimedAction(Action):
                 'remove' : self.remove}
 
     def recount(self):
+        """ Shows all periodic functions/actions
+
+        """
         msg = 'Here are the registered timed actions:\n'
         for (action, option, inputs, interval), last_time in self.actor.timed_actions.iteritems():
             msg += ('Command: {0} {1} {2}\n'
                     'Time Interval: {3}\n'
                     'Last Time: {4}\n'.format(action.name, option, inputs, interval, last_time))
-        # lazy
+        # I'm being lazy here. Because I need the channel to speak, but I think
+        # channel should be independent of the action
         raise BadInputError(msg)
 
-    def add(self, interval=0, action='', *commands):
+    def add(self, interval='', action='', *commands):
+        """ Adds a new periodic function
+
+        Parameters
+        ----------
+        interval : str
+            Interval by which the function/action will be run
+            Can be turned into a number
+        action : str
+            Name of the action that will be run
+        commands : list
+            List of string of commands that are necessary to run the command
+            Needs option (which function within action)
+            Needs input for the function within action
+        """
         error_msg = ''
-        if interval == 0 or action == '' or len(commands) == 0:
+        if interval == '' or action == '' or len(commands) == 0:
            error_msg += 'I will help you add timed actions.\n'
         try:
             interval = int(interval)
         except (ValueError, IndexError):
             error_msg += ('First option specifies how often the action is repeated.'
                           ' It must be a number.\n')
+
         allowed_actions = [i for i in self.actor.actions if i != self.name]
         if action not in allowed_actions:
             error_msg += ('Second option onwards specify what is done.'
                           ' It must be one of {0}.\n'.format(allowed_actions))
         if error_msg != '':
             raise BadInputError(error_msg)
+
         action = self.actor.actions[action]
         option = commands[0]
         inputs = commands[1:]
         action.options[option](*inputs)
         self.actor.timed_actions[(action, option, inputs, interval)] = time.time()
 
-    def remove(self, *commands):
+    def remove(self, action='', *commands):
+        """ Removes a periodic function from list
+
+        Parameters
+        ----------
+        action : str
+            Name of the action
+        commands : list
+            List of string of commands that are necessary to run the command
+            Needs option (which function within action)
+            Needs input for the function within action
+        """
         error_msg = ''
         if len(commands) == 0 or commands[0] == '':
             error_msg += 'I will help you manage timed actions.\n'

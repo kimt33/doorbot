@@ -1,6 +1,9 @@
 
 def listen(self, sounds, sound_type='dm'):
-    return direct_messages(self.call_name, sounds)
+    if sound_type == 'dm':
+        return direct_messages(self.call_name, sounds)
+    else:
+        raise NotImplementedError
 
 def direct_messages(host, sounds):
     """ Extract direct message from input
@@ -15,10 +18,10 @@ def direct_messages(host, sounds):
 
     Returns
     -------
-    message : str
-        Direct message
     channel : str
         Channel from which the message arrived
+    message : str
+        Direct message
     (None, None)
         If the message is not directed at the bot
     """
@@ -36,6 +39,6 @@ def direct_messages(host, sounds):
             channel = sound['channel']
         except (KeyError, IndexError):
             pass
-    return message, channel
+    return channel, message
 
 

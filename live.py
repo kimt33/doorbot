@@ -15,9 +15,9 @@ if __name__ == "__main__":
         print("ayerslab_bot connected and running!")
         ayersbot = bot.brain.Brain(BOT_ID, slack_client)
         while True:
-            command, channel = ayersbot.listen(slack_client.rtm_read())
+            channel, command = ayersbot.listen(slack_client.rtm_read())
             if command and channel:
-                ayersbot.process(command, channel)
+                ayersbot.process(channel, command)
             ayersbot.timed_process(time.time()//1)
             time.sleep(READ_WEBSOCKET_DELAY)
     else:
