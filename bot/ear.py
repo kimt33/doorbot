@@ -18,27 +18,33 @@ def direct_messages(host, sounds):
 
     Returns
     -------
-    channel : str
-        Channel from which the message arrived
-    message : str
-        Direct message
-    (None, None)
-        If the message is not directed at the bot
+    sound : dict
+        'channel' : str
+            Channel from which the message arrived
+        'user' : str
+            User from which the message is sent
+        'message' : str
+            Direct message
+        {}
+            If the message is not directed at the bot
     """
     if not hasattr(sounds, '__iter__'):
         raise TypeError('Given sounds must be iterable')
 
-    message, channel = None, None
+    output = {}
     for sound in sounds:
+        # NOTE: not too sure what multiple sound means
         if not isinstance(sound, dict):
             raise TypeError('Each sound must be a dictionary')
         try:
             # FIXME: assumes that the message always starts with <@userid> if dm
             #        not so nice if multiple @user are present
-            message = sound['text'].split(host)[1].strip()
-            channel = sound['channel']
+            output['message'] = sound['text'].split(host)[1].strip()
+            output['channel'] = sound['channel']
+            output['user'] = sound['user']
+            output['time'] = sound['ts']
         except (KeyError, IndexError):
             pass
-    return channel, message
+    return output
 
 

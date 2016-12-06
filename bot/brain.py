@@ -26,6 +26,8 @@ class Brain(object):
         Dictionary of (instance of Action, option, inputs, interval) to last time
         process has run
         Stores processes that will be repeated in some time interval
+    conversations : dict
+        Dictionary of channel to (userid, last input, time)
 
     """
     def __init__(self, bot_id, slack_client):
@@ -34,6 +36,7 @@ class Brain(object):
         self.actions = {i.name:i for i in [GroupMeeting(self),
                                            TimedAction(self)]}
         self.timed_actions = {}
+        self.conversations = {}
         # TODO: add status channel, conversation per channel (who, what, for how long)
 
     @property
@@ -60,7 +63,7 @@ class Brain(object):
         """
         return ear.listen(self, slack_rtm_output, sound_type='dm')
 
-    def speak(self, channel, response):
+    def speak(self, channel, response, dm=''):
         """ Sends information to Slack client
 
         Parameters
@@ -71,9 +74,33 @@ class Brain(object):
             What bot will say on channel
 
         """
-        mouth.speak(self, channel, response)
+        mouth.speak(self, channel, response, dm=dm)
 
-    def process(self, channel, command):
+    def _process_step1(self, command):
+        """ Checks to see if given command uses provides an allowed action
+        """
+        sel_actions = [name for name in self.actions if name in command]
+        if len(sel_actions) == 0:
+            message = 'I can only do one of {0}.'.format(self.actions.keys())
+            return (False, message)
+        # reorder actions
+        sel_actions = sorted(sel_actions, key=command.index)
+        return (True, sel_actions[0])
+
+    def _process_step2(self, action, command):
+        """ Checks if the option corresponds with the action
+        """
+        options = [i for i in action.options if i in command]
+        if len(options) == 0:
+            message = action.init_response
+            return (False, message)
+        elif len(options) >= 2:
+            message = 'I have more than one valid options.'
+            message += '\nPlease give me only one of {0}.'.format(action.options)
+            return (False, message)
+        return (True, options[0])
+
+    def process(self, channel, command, user='', time=0):
         """ Processes the command
 
         Parameters
@@ -83,30 +110,54 @@ class Brain(object):
         command : str
             Direct message that contains the command
         """
+        time = float(time)
+        # make conversation
+        if channel not in self.conversations:
+            self.conversations[channel] = (user, time, '')
+        # can only converse with one person per channel
+        elif (self.conversations[channel][0] != user and
+              abs(time - self.conversations[channel][1]) < 60):
+            self.speak(channel,
+                       "I'm sorry, I'm currently talking with <@{0}> at the moment.".format(self.conversations[channel][0]),
+                       dm=user)
+            return
+        old_conv = self.conversations[channel][2]
+
         # find actions in command
-        sel_actions = [name for name in self.actions if name in command]
-        if len(sel_actions) == 0:
-            self.speak(channel, 'I can only do one of {0}.'.format(self.actions.keys()))
-        # reorder actions
-        sel_actions = sorted(sel_actions, key=command.index)
-
-        action_name = sel_actions[0]
-        action = self.actions[action_name]
-        # separate options
-        option_and_inputs = command.split(action_name)[1].split()
-
-        if len(option_and_inputs) == 0 or option_and_inputs[0] not in action.options:
-            self.speak(channel, self.actions[action_name].init_response)
-            self.speak(channel, '\nMake sure you delimit the commands with spaces')
+        action_name = ''
+        if len(old_conv) >= 1:
+            action_name = old_conv[0]
         else:
-            # run process
-            option = option_and_inputs[0]
-            inputs = option_and_inputs[1:]
-            try:
-                action.options[option](*inputs)
-                self.speak(channel, 'Done!')
-            except BadInputError, e:
-                self.speak(channel, str(e))
+            step1 = self._process_step1(command)
+            if not step1[0]:
+                self.speak(channel, step1[1], dm=user)
+                return
+            action_name = step1[1]
+            command = command.split(action_name)[1]
+            self.conversations[channel] = (user, time, (action_name,))
+
+        # find option in command
+        action = self.actions[action_name]
+        option = ''
+        if len(old_conv) >= 2:
+            option = old_conv[1]
+        else:
+            step2 = self._process_step2(action, command)
+            if not step2[0]:
+                self.speak(channel, step2[1], dm=user)
+                return
+            option = step2[1]
+            command = command.split(option)[1]
+            self.conversations[channel] = (user, time, (action_name, option))
+
+        # find inputs
+        inputs = command.split()
+        try: #good inputs
+            action.options[option](*inputs)
+            self.speak(channel, 'Done!')
+        except BadInputError, e: #bad inputs
+            message = str(e) + '\nMake sure you delimit the commands with spaces.'
+            self.speak(channel, message)
 
     def timed_process(self, time):
         """ Runs stored commands every few seconds

@@ -109,3 +109,5 @@ class GroupMeeting(action.Action):
             identifiers = {i:j for i,j in identifier.split(':') for identifier in identifiers}
         if error_msg != '':
             raise action.BadInputError(error_msg)
+
+
