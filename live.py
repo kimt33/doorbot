@@ -18,6 +18,7 @@ if __name__ == "__main__":
             command, channel = ayersbot.listen(slack_client.rtm_read())
             if command and channel:
                 ayersbot.process(command, channel)
+            ayersbot.timed_process(time.time()//1)
             time.sleep(READ_WEBSOCKET_DELAY)
     else:
         print("Connection failed. Invalid Slack token or bot ID?")
