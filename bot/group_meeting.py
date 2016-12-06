@@ -8,7 +8,7 @@ class GroupMeeting(action.Action):
     @property
     def init_response(self):
         return ('I can only do one of {0}'
-                ' when managing group meetings').format(self.options.keys()) 
+                ' when managing group meetings').format(self.options.keys())
 
     @property
     def options(self):
@@ -19,7 +19,7 @@ class GroupMeeting(action.Action):
     def select_member(self, criteria='', job=''):
         error_msg = ''
         if criteria in ['', 'help'] and job == '':
-           error_msg += 'I will help you select members for the group meeting.\n' 
+           error_msg += 'I will help you select members for the group meeting.\n'
         if criteria not in ['random', 'volunteer', 'myself as']:
             error_msg += ('First option controls how the job will be assigned.'
                           ' It must be one of "random", "volunteer" or "myself as".\n')
@@ -32,7 +32,7 @@ class GroupMeeting(action.Action):
     def modify(self, item='', to_val='', *identifiers):
         error_msg = ''
         if item == '' and to_val == '' and len(identifiers) == 0:
-           error_msg += 'I will help you modify a group meeting.\n' 
+           error_msg += 'I will help you modify a group meeting.\n'
         if item not in ['presenter', 'chair', 'title', 'date']:
             error_msg += ('First option controls what is being modified.'
                           ' It must be one of "presenter", "chair", "title", or "date".\n')

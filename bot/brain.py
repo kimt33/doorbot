@@ -41,15 +41,16 @@ class Brain(object):
         Returns
         -------
         """
-        sel_actions = [(action, name) for action, name in self.actions.iteritems() if name in command]
-        if len(sel_actions) > 1:
-            self.speak(channel, 'I can only handle one command.')
-        elif len(sel_actions) == 0:
+        sel_actions = [name for name in self.actions if name in command]
+        if len(sel_actions) == 0:
             self.speak(channel, 'I can only do one of {0}.'.format(self.actions))
-        action, action_name = sel_actions[0]
+        # reorder actions
+        sel_actions = sorted(sel_actions, key=command.index)
+        action_name = sel_actions[0]
+        action = self.actions[action_name]
         option_and_inputs = command.split(action_name)[1].split()
         if len(option_and_inputs) == 0 or option_and_inputs[0] not in action.options:
-            self.speak(channel, action.init_response)
+            self.speak(channel, self.actions[action_name].init_response)
             self.speak(channel, '\nMake sure you delimit the commands with spaces')
         else:
             option = option_and_inputs[0]
@@ -58,6 +59,7 @@ class Brain(object):
                 action.options[option](*inputs)
             except BadInputError, e:
                 self.speak(channel, str(e))
+        self.speak(channel, 'Done!')
 
     def timed_process(self, time):
         """ Runs some commands every few seconds
@@ -71,7 +73,7 @@ class Brain(object):
             if time - last_time > interval:
                 #FIXME:
                 # try:
-                action(*inputs)
+                action.options[option](*inputs)
                 self.timed_actions[(action, option, inputs, interval)] = time
                 # except:
                 #     self.speak(some_channel, 'something went wrong with this action')
