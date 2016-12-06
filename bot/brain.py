@@ -110,13 +110,15 @@ class Brain(object):
         command : str
             Direct message that contains the command
         """
+        #TODO: reset conversation manually
+
         time = float(time)
         # make conversation
-        if channel not in self.conversations:
+        if (channel not in self.conversations or
+            abs(time - self.conversations[channel][1]) > 60):
             self.conversations[channel] = (user, time, '')
         # can only converse with one person per channel
-        elif (self.conversations[channel][0] != user and
-              abs(time - self.conversations[channel][1]) < 60):
+        elif self.conversations[channel][0] != user:
             self.speak(channel,
                        "I'm sorry, I'm currently talking with <@{0}> at the moment.".format(self.conversations[channel][0]),
                        dm=user)
