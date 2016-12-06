@@ -4,4 +4,5 @@ from . import ear
 
 from . import action
 from . import timed_action
+from . import group_meeting
 

@@ -2,12 +2,13 @@ from . import ear
 from . import mouth
 from .action import BadInputError
 from .timed_action import TimedAction
+from .group_meeting import GroupMeeting
 
 class Brain(object):
     def __init__(self, bot_id, slack_client):
         self.bot_id = bot_id
         self.slack_client = slack_client
-        self.actions = {i.name:i for i in [
+        self.actions = {i.name:i for i in [GroupMeeting(self),
                                            TimedAction(self)]}
         # dictionary of (action, options, inputs, interval) : last time acted
         self.timed_actions = {}
