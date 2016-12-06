@@ -128,6 +128,14 @@ class Brain(object):
                        "I'm sorry, I'm currently talking with <@{0}> at the moment.".format(self.conversations[channel][0]),
                        dm=user)
             return
+        # end conversation
+        enders = ['forget', 'reset', 'fuck off', 'shut up', 'stop']
+        for ender in enders:
+            if ender in command:
+                del self.conversations[channel]
+                self.speak(channel, 'Alright then.', dm=user)
+                return
+        # remember old conversation
         old_conv = self.conversations[channel][2]
 
         # find actions in command
