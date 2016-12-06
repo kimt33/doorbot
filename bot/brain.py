@@ -46,7 +46,7 @@ class Brain(object):
         """
         return "<@{0}>".format(self.bot_id)
 
-    def listen(self, slack_rtm_output):
+    def listen(self, slack_rtm_output, sound_type='all'):
         """ Retrieves information from Slack client
 
         Parameters
@@ -61,7 +61,7 @@ class Brain(object):
         message : str
             Direct message
         """
-        return ear.listen(self, slack_rtm_output, sound_type='dm')
+        return ear.listen(self, slack_rtm_output, sound_type=sound_type)
 
     def speak(self, channel, response, dm=''):
         """ Sends information to Slack client
@@ -100,7 +100,7 @@ class Brain(object):
             return (False, message)
         return (True, options[0])
 
-    def process(self, channel, command, user='', time=0):
+    def process(self, channel, command, user='', time=0, dm=False):
         """ Processes the command
 
         Parameters
@@ -113,6 +113,11 @@ class Brain(object):
         #TODO: reset conversation manually
 
         time = float(time)
+        # skip conversations that are not directed at bot (unless already in conversation)
+        if (not dm and
+            (channel not in self.conversations or
+             self.conversations[channel][0] != user)):
+            return
         # make conversation
         if (channel not in self.conversations or
             abs(time - self.conversations[channel][1]) > 60):
