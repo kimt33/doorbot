@@ -123,7 +123,7 @@ class Brain(object):
         # make conversation
         if (channel not in self.conversations or
             abs(time - self.conversations[channel][1]) > 60):
-            self.conversations[channel] = (user, time, '')
+            self.conversations[channel] = (user, time)
         # can only converse with one person per channel
         elif self.conversations[channel][0] != user:
             self.speak(channel,
@@ -131,14 +131,23 @@ class Brain(object):
                        dm=user)
             return
         # end conversation
-        enders = ['forget', 'reset', 'fuck off', 'shut up', 'stop']
+        enders = ['forget', 'reset', 'fuck', 'shut up', 'stop']
         for ender in enders:
             if ender in command:
                 del self.conversations[channel]
                 self.speak(channel, 'Alright then.', dm=user)
                 return
+        # check
+        if 'status' in command:
+            self.speak(channel, 'Bleep bloop\n{0}'.format(' '.join(self.conversations[channel][2:])), dm=user)
+            return
+        if 'undo' in command:
+            self.speak(channel, 'Undoing the last input.')
+            self.conversations[channel] = self.conversations[channel][:-1]
+            return
+
         # remember old conversation
-        old_conv = self.conversations[channel][2]
+        old_conv = self.conversations[channel][2:]
 
         # find actions in command
         action_name = ''
@@ -151,7 +160,7 @@ class Brain(object):
                 return
             action_name = step1[1]
             command = command.split(action_name)[1]
-            self.conversations[channel] = (user, time, (action_name,))
+            self.conversations[channel] = (user, time, action_name)
 
         # find option in command
         action = self.actions[action_name]
@@ -165,16 +174,23 @@ class Brain(object):
                 return
             option = step2[1]
             command = command.split(option)[1]
-            self.conversations[channel] = (user, time, (action_name, option))
+            self.conversations[channel] = (user, time, action_name, option)
 
         # find inputs
-        inputs = command.split()
+        inputs = tuple(command.split())
+        if len(old_conv) >= 3:
+            combined_inputs = old_conv[2:] + inputs
+        else:
+            combined_inputs = inputs
+        print combined_inputs
         try: #good inputs
-            action.options[option](*inputs)
+            action.options[option](*combined_inputs)
             self.speak(channel, 'Done!')
+            del self.conversations[channel]
         except BadInputError, e: #bad inputs
-            message = str(e) + '\nMake sure you delimit the commands with spaces.'
+            message = str(e.msg) # + '\nMake sure you delimit the commands with spaces.'
             self.speak(channel, message)
+            self.conversations[channel] = self.conversations[channel][:4] + e.args
 
     def timed_process(self, time):
         """ Runs stored commands every few seconds

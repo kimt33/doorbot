@@ -6,7 +6,9 @@ from abc import ABCMeta, abstractproperty
 class BadInputError(Exception):
     """ Error for bad input by user
     """
-    pass
+    def __init__(self, msg, args=tuple()):
+        self.msg = msg
+        self.args = args
 
 class Action(object):
     """ Abstract class for each functionality in bot

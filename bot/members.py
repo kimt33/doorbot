@@ -49,23 +49,27 @@ class GroupMember(action.Action):
                                        " just reference using `@`, for example,"
                                        " @ayerslab_bot.\n"
                                        "If they don't have Slack or you don't know,"
-                                       " just write `N/A`")
+                                       " just write `N/A`",
+                                       args=(name,))
         if email == '':
-            raise action.BadInputError('What is their email address?')
-        if position == '' or position not in ['undergrad student', 'Master\'s student',
-                                              'PhD student', 'Postdoc', 'Professor']:
+            raise action.BadInputError('What is their email address?',
+                                       args=(name, slack_id))
+        if position == '' or position not in ['undergrad', 'Master\'s',
+                                              'PhD', 'Postdoc', 'Professor']:
             raise action.BadInputError('What is their role in the group? It should'
-                                       ' be one of "undergrad student", "Master\'s student",'
-                                       ' "PhD student", "Postdoc", or "Professor".')
+                                       ' be one of "undergrad", "Master\'s",'
+                                       ' "PhD", "Postdoc", or "Professor".',
+                                       args=(name, slack_id, email))
         if is_present == '' or is_present not in ['yes', 'no']:
-            raise action.BadInputError('Are they in the lab? It should be one of "yes" or "no".')
+            raise action.BadInputError('Are they in the lab? It should be one of "yes" or "no".',
+                                       args=(name, slack_id, email, position))
         if is_present == 'yes':
             dates_present = '(9999-99-99:{0})'.format(date.today().isoformat())
         elif is_present == 'no':
             dates_present = ''
 
-        self.cursor.execute('INSERT INTO members VALUES (%s,%s,%s,%s,%s)',
-                            name, slack_id, email, position, dates_present)
+        self.cursor.execute('INSERT INTO members VALUES (?,?,?,?,?)',
+                            (name, slack_id, email, position, dates_present))
         self.db_conn.commit()
 
     def modify(self, item='', to_val='', *identifiers):
@@ -73,9 +77,9 @@ class GroupMember(action.Action):
             raise action.BadInputError('Whose data would you like to change?')
 
     def list(self):
-        message = '{0}{1:>15s}{2:>15s}{3:>15}{4:>15}'.format('Name', 'Slack ID', 'Email', 'Who?', 'Away?')
+        message = '{0}{1:>15s}{2:>15s}{3:>15}{4:>15}\n'.format('Name', 'Slack ID', 'Email', 'Who?', 'Away?')
         for row in self.cursor.execute('SELECT * FROM members ORDER BY dates_present'):
-            message += '{0}{1:>15s}{2:>15}{3:>15}'.format(*row)
+            message += '{0}{1:>15s}{2:>15}{3:>15}{4:>15}\n'.format(*row)
         raise action.BadInputError(message)
 
     def import_from_slack(self):
