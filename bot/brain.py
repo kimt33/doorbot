@@ -9,6 +9,7 @@ from . import ear
 from . import mouth
 from .action import BadInputError
 from .timed_action import TimedAction
+from .members import GroupMember
 from .group_meeting import GroupMeeting
 
 class Brain(object):
@@ -34,10 +35,11 @@ class Brain(object):
         self.bot_id = bot_id
         self.slack_client = slack_client
         self.actions = {i.name:i for i in [GroupMeeting(self),
-                                           TimedAction(self)]}
+                                           TimedAction(self),
+                                           GroupMember(self),]}
         self.timed_actions = {}
         self.conversations = {}
-        # TODO: add status channel, conversation per channel (who, what, for how long)
+        # TODO: add status channel
 
     @property
     def call_name(self):
@@ -110,7 +112,7 @@ class Brain(object):
         command : str
             Direct message that contains the command
         """
-        #TODO: reset conversation manually
+        # FIXME: doesn't work with timed action
 
         time = float(time)
         # skip conversations that are not directed at bot (unless already in conversation)
