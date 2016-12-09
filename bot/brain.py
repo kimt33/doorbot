@@ -4,7 +4,7 @@ Responsible for processing commands that are received, and for acting and respon
 appropriately
 
 """
-
+import shlex
 from . import ear
 from . import mouth
 from .action import BadInputError
@@ -44,7 +44,7 @@ class Brain(object):
     @property
     def call_name(self):
         """ Name of bot as it appears in Slack client
-        
+
         """
         return "<@{0}>".format(self.bot_id)
 
@@ -177,7 +177,7 @@ class Brain(object):
             self.conversations[channel] = (user, time, action_name, option)
 
         # find inputs
-        inputs = tuple(command.split())
+        inputs = tuple(shlex.split(command))
         if len(old_conv) >= 3:
             combined_inputs = old_conv[2:] + inputs
         else:

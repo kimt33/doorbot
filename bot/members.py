@@ -3,6 +3,7 @@
 Takes commands from Slack client and translate them into script
 
 """
+import re
 import sqlite3
 from datetime import datetime, date
 from . import action
@@ -25,7 +26,7 @@ class GroupMember(action.Action):
         self.cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
         if u'members' not in (j for i in self.cursor.fetchall() for j in i):
             self.cursor.execute('''CREATE TABLE members
-            (name text, slack_id text, email text, position text, dates_present text)''')
+            (name text, slack_id text, email text, position text, dates_away text)''')
             self.db_conn.commit()
 
     @property
@@ -63,23 +64,36 @@ class GroupMember(action.Action):
         if is_present == '' or is_present not in ['yes', 'no']:
             raise action.BadInputError('Are they in the lab? It should be one of "yes" or "no".',
                                        args=(name, slack_id, email, position))
-        if is_present == 'yes':
-            dates_present = '(9999-99-99:{0})'.format(date.today().isoformat())
-        elif is_present == 'no':
+        if is_present == 'no':
+            dates_present = '(9999-12-31:{0})'.format(date.today().isoformat())
+        elif is_present == 'yes':
             dates_present = ''
 
         self.cursor.execute('INSERT INTO members VALUES (?,?,?,?,?)',
                             (name, slack_id, email, position, dates_present))
         self.db_conn.commit()
 
-    def modify(self, item='', to_val='', *identifiers):
+    def modify(self, name='', to_val='', *identifiers):
         if len(identifiers) == 0:
             raise action.BadInputError('Whose data would you like to change?')
+        self.cursor.execute('SELECT * FROM members WHERE name=?', name)
+        self.cursor.fetchall()
 
     def list(self):
         message = '{0}{1:>15s}{2:>15s}{3:>15}{4:>15}\n'.format('Name', 'Slack ID', 'Email', 'Who?', 'Away?')
         for row in self.cursor.execute('SELECT * FROM members ORDER BY dates_present'):
-            message += '{0}{1:>15s}{2:>15}{3:>15}{4:>15}\n'.format(*row)
+            # find dates
+            dates = re.findall(r'\d\d\d\d-\d\d-\d\d', row[-1])
+            to_dates = dates[0::2]
+            from_dates = dates[1::2]
+            is_away = 'no'
+            for to_date, from_date in zip(to_dates, from_dates):
+                if from_date <= date.today() < to_date:
+                    is_away = 'yes'
+                    break
+            # construct message
+            data = row[:-1] + tuple(is_away)
+            message += '{0}{1:>15s}{2:>15}{3:>15}{4:>15}\n'.format(*data)
         raise action.BadInputError(message)
 
     def import_from_slack(self):
