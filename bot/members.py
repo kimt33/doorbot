@@ -4,14 +4,13 @@ Takes commands from Slack client and translate them into script
 
 """
 import re
-import sqlite3
 from datetime import datetime, date
 from . import action
 
 class GroupMember(action.Action):
     """ Action class for group member management
     """
-    def __init__(self, actor, db='members.db'):
+    def __init__(self, actor):
         """
         Parameters
         ----------
@@ -21,8 +20,8 @@ class GroupMember(action.Action):
             Name of the database file
         """
         super(GroupMember, self).__init__(actor)
-        self.db_conn = sqlite3.connect(db)
-        self.cursor = self.db_conn.cursor()
+        self.db_conn = self.actor.db_conn
+        self.cursor = self.actor.cursor
         self.cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
         if u'members' not in (j for i in self.cursor.fetchall() for j in i):
             self.cursor.execute('''CREATE TABLE members

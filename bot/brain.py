@@ -5,6 +5,7 @@ appropriately
 
 """
 import shlex
+import sqlite3
 from . import ear
 from . import mouth
 from .action import BadInputError, Messaging
@@ -34,6 +35,8 @@ class Brain(object):
     def __init__(self, bot_id, slack_client):
         self.bot_id = bot_id
         self.slack_client = slack_client
+        self.db_conn = sqlite3.connect('ayerslab.db')
+        self.cursor = self.db_conn.cursor()
         self.actions = {i.name:i for i in [GroupMeeting(self),
                                            TimedAction(self),
                                            GroupMember(self),]}
