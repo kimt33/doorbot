@@ -25,8 +25,24 @@ class GroupMember(action.Action):
         self.cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
         if u'members' not in (j for i in self.cursor.fetchall() for j in i):
             self.cursor.execute('''CREATE TABLE members
-            (name text, slack_id text, email text, position text, dates_away text, permission text)''')
+            (id INTEGER PRIMARY KEY,
+             name TEXT,
+             userid TEXT NOT NULL,
+             slack_id TEXT,
+             email TEXT,
+             role TEXT,
+             dates_away TEXT,
+             permission TEXT)''')
             self.db_conn.commit()
+        # FIXME: there hsould be a better way for this
+        self.col_ids = {'id':0,
+                        'name':1,
+                        'userid':2,
+                        'slack_id':3,
+                        'email':4,
+                        'role':5,
+                        'dates_away':6,
+                        'permission':7}
 
     @property
     def name(self):
@@ -42,51 +58,60 @@ class GroupMember(action.Action):
         return {'add':self.add, 'list':self.list, 'modify':self.modify,
                 'import':self.import_from_slack}
 
-    def add(self, name='', slack_id='', email='', position='', is_present=''):
+    def add(self, name='', userid='', slack_id='', email='', role='', is_away='', permission=''):
         if name == '':
             raise action.BadInputError('What is their name?')
-        if slack_id == '':
-            raise action.BadInputError("What is their Slack ID? If you don't know,"
-                                       " just reference using `@`, for example,"
-                                       " @ayerslab_bot.\n"
-                                       "If they don't have Slack or you don't know,"
-                                       " just write `N/A`",
+        if userid == '':
+            raise action.BadInputError("What is their Slack username?"
+                                       " If you don't know, just write `None`.",
                                        args=(name,))
-        if email == '':
+        if slack_id == '':
+            raise action.BadInputError("What is their Slack ID?"
+                                       " If you don't know, just write `None`",
+                                       args=(name, userid))
+        if email not in ['', 'None']:
             raise action.BadInputError('What is their email address?',
-                                       args=(name, slack_id))
-        if position == '' or position not in ['undergrad', 'Master\'s',
-                                              'PhD', 'Postdoc', 'Professor']:
-            raise action.BadInputError('What is their role in the group? It should'
-                                       ' be one of "undergrad", "Master\'s student",'
-                                       ' "PhD student", "Postdoc", or "Professor".',
-                                       args=(name, slack_id, email))
-        if is_present == '' or is_present not in ['yes', 'no']:
-            raise action.BadInputError('Are they in the lab? It should be one of "yes" or "no".',
-                                       args=(name, slack_id, email, position))
-        if is_present == 'no':
+                                       args=(name, userid, slack_id))
+
+        roles = ['undergrad', 'Master\'s', 'PhD', 'Postdoc', 'Professor']
+        if role == '' or role not in roles:
+            raise action.BadInputError('What is their role in the group?'
+                                       ' It should be one of {0}.'.format(roles),
+                                       args=(name, userid, slack_id, email))
+        if is_away == '' and is_away in ['yes', 'no']:
+            raise action.BadInputError('Are they away from the lab? It should be one of "yes" or "no".',
+                                       args=(name, userid, slack_id, email, role))
+        dates_away = ''
+        if is_away == 'yes':
             dates_away = '(9999-12-31:{0})'.format(date.today().isoformat())
-        elif is_present == 'yes':
+        elif is_away == 'no':
             dates_away = ''
 
-        self.cursor.execute('INSERT INTO members VALUES (?,?,?,?,?,?)',
-                            (name, slack_id, email, position, dates_away, 'user'))
+        permission = 'user'
+
+        if userid == 'None':
+            userid = ''
+        if slack_id == 'None':
+            slack_id = ''
+
+        self.cursor.execute('INSERT INTO members'
+                            ' (name, userid, slack_id, email, role, dates_away, permission)'
+                            ' VALUES (?,?,?,?,?,?,?)',
+                            (name, userid, slack_id, email, role, dates_away, permission))
         self.db_conn.commit()
 
     def modify(self, item='', to_val='', *identifiers):
-        if item == '' or item not in ['name', 'slack_id', 'email', 'position', 'dates_away']:
+        if item == '' or item not in self.col_ids.keys():
             raise action.BadInputError('What would you like to change? It should be'
-                                       ' one of {0}'.format(['name', 'slack_id', 'email',
-                                                             'position', 'dates_away']))
+                                       ' one of {0}'.format(self.col_ids.keys()))
         if to_val == '':
             raise action.BadInputError('What would you like to change it to?',
                                        args=(item,))
         if len(identifiers) == 0:
             raise action.BadInputError('Can you tell me more about this person?'
-                                       ' Could you tell me the name, slack id, email'
-                                       ' or position?'
+                                       ' Could you tell me the one or more of {0}}?'
                                        ' And could you delimit the value with `=`?'
-                                       ' For example, `name=ayersbot`.',
+                                       ' For example, `name=ayersbot`.'.format(self.col_ids.keys()),
                                        args=(item, to_val))
 
         where_command = ' WHERE '
@@ -110,50 +135,82 @@ class GroupMember(action.Action):
                             [to_val,]+vals)
         self.db_conn.commit()
 
-    def list(self):
-        message = '{0:<30s}{1:>40s}{2:>20}{3:>15}\n'.format('Name', 'Email', 'Who?', 'Away?')
+    def list(self, *column_identifiers):
+        col_names =  {'id':'Database ID',
+                      'name':'Name',
+                      'userid':'User ID',
+                      'slack_id':'Slack ID',
+                      'email':'Email',
+                      'role':'Role',
+                      'dates_away':'Dates Away',
+                      'is_away':'Away?',
+                      'permission':'Permission'}
+        col_formats = {'id':'{:<4}',
+                       'name':'{:>30}',
+                       'userid':'{:>10}',
+                       'slack_id':'{:>20}',
+                       'email':'{:>40}',
+                       'role':'{:>20}',
+                       'dates_away':'{:>15}',
+                       'is_away':'{:>15}',
+                       'permission':'{:>12}'}
+
+        if len(column_identifiers) == 0:
+            # column_identifiers = ['id', 'name', 'userid', 'email', 'role', 'is_away', 'permission']
+            column_identifiers = ['id', 'name', 'userid', 'slack_id', 'email', 'role', 'dates_away', 'is_away', 'permission']
+
+        message_format = u''.join(col_formats[i] for i in column_identifiers) + u'\n'
+        message = message_format.format(*[col_names[i] for i in column_identifiers])
+
         for row in self.cursor.execute('SELECT * FROM members ORDER BY dates_away'):
-            # find dates
-            dates = re.findall(r'\d\d\d\d-\d\d-\d\d', row[-2])
-            to_dates = dates[0::2]
-            from_dates = dates[1::2]
-            is_away = 'no'
-            for to_date, from_date in zip(to_dates, from_dates):
-                to_date = datetime.strptime(to_date, '%Y-%m-%d')
-                from_date = datetime.strptime(from_date, '%Y-%m-%d')
-                if from_date <= datetime.today() < to_date:
-                    is_away = 'yes'
-                    break
+            row_data = []
+            for identifier in column_identifiers:
+                # find dates
+                if identifier == 'is_away':
+                    dates = re.findall(r'\d\d\d\d-\d\d-\d\d', row[self.col_ids['dates_away']])
+                    to_dates = dates[0::2]
+                    from_dates = dates[1::2]
+                    is_away = 'no'
+                    for to_date, from_date in zip(to_dates, from_dates):
+                        to_date = datetime.strptime(to_date, '%Y-%m-%d')
+                        from_date = datetime.strptime(from_date, '%Y-%m-%d')
+                        if from_date <= datetime.today() < to_date:
+                            is_away = 'yes'
+                            break
+                    row_data.append(is_away)
+                else:
+                    index = self.col_ids[identifier]
+                    row_data.append(row[index])
             # construct message
-            data = row[0:1] + row[2:-2] + (is_away,)
-            message += u'{0:<30s}{1:>40}{2:>20}{3:>15}\n'.format(*data)
+            message += message_format.format(*row_data)
         raise action.Messaging(message)
 
     def import_from_slack(self):
         names = []
+        userids = []
         slack_ids = []
         emails = []
-        positions = []
+        roles = []
         away_dates = []
         permissions = []
-        def check(profile, text, else_val=''):
+        def check(profile, text):
             try:
-                if not profile[text]:
-                    raise KeyError
                 return profile[text]
             except KeyError:
-                return else_val
+                return ''
         for i in self.actor.slack_client.api_call('users.list')['members']:
-            names.append(check(i['profile'], 'real_name', i['name']))
+            names.append(check(i['profile'], 'real_name'))
+            userids.append(i['name'])
             slack_ids.append(i['id'])
-            emails.append(check(i['profile'],'email'))
-            positions.append('')
+            emails.append(check(i['profile'], 'email'))
+            roles.append('')
             if 'status' not in i:
                 away_dates.append('(9999-12-31:{0})'.format(date.today().isoformat()))
             else:
                 away_dates.append('')
             permissions.append('user')
-        self.cursor.executemany('INSERT INTO members VALUES (?,?,?,?,?,?)',
-                            zip(names, slack_ids, emails, positions, away_dates, permissions))
+        self.cursor.executemany("""INSERT INTO members
+                                (name, userid, slack_id, email, role, dates_away, permission)
+                                VALUES (?,?,?,?,?,?,?)""",
+                                zip(names, userids, slack_ids, emails, roles, away_dates, permissions))
         self.db_conn.commit()
-
