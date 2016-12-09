@@ -3,6 +3,12 @@
 """
 from abc import ABCMeta, abstractproperty
 
+class Messaging(Exception):
+    """ Error "used" to pass messages
+    """
+    def __init__(self, msg):
+        self.msg = msg
+
 class BadInputError(Exception):
     """ Error for bad input by user
     """

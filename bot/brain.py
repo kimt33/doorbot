@@ -7,7 +7,7 @@ appropriately
 import shlex
 from . import ear
 from . import mouth
-from .action import BadInputError
+from .action import BadInputError, Messaging
 from .timed_action import TimedAction
 from .members import GroupMember
 from .group_meeting import GroupMeeting
@@ -182,7 +182,6 @@ class Brain(object):
             combined_inputs = old_conv[2:] + inputs
         else:
             combined_inputs = inputs
-        print combined_inputs
         try: #good inputs
             action.options[option](*combined_inputs)
             self.speak(channel, 'Done!')
@@ -191,6 +190,9 @@ class Brain(object):
             message = str(e.msg) # + '\nMake sure you delimit the commands with spaces.'
             self.speak(channel, message)
             self.conversations[channel] = self.conversations[channel][:4] + e.args
+        except Messaging, e:
+            self.speak(channel, e.msg)
+            del self.conversations[channel]
 
     def timed_process(self, time):
         """ Runs stored commands every few seconds
