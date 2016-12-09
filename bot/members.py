@@ -128,7 +128,6 @@ class GroupMember(action.Action):
             # construct message
             data = row[0:1] + row[2:-2] + (is_away,)
             message += u'{0:<30s}{1:>40}{2:>20}{3:>15}\n'.format(*data)
-        print message
         raise action.Messaging(message)
 
     def import_from_slack(self):
