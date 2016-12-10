@@ -4,7 +4,7 @@ Takes commands from Slack client and translate them into script
 
 """
 import re
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 from . import action
 
 class GroupMember(action.Action):
@@ -56,7 +56,34 @@ class GroupMember(action.Action):
     @property
     def options(self):
         return {'add':self.add, 'list':self.list, 'modify':self.modify,
-                'import':self.import_from_slack}
+                'import':self.import_from_slack, 'away':self.add_away}
+
+    @property
+    def valid_roles(self):
+        return ['undergrad', 'Master\'s', 'PhD', 'Postdoc', 'Professor']
+
+    def is_valid_role(self, role):
+        if role in self.valid_roles:
+            return True
+        else:
+            return False
+
+    def _find_from_identifiers(self, *identifiers):
+        where_command = 'WHERE '
+        vals = []
+        for identifier in identifiers:
+            key, val = identifier.split('=')
+            where_command += '{0}=? '.format(key)
+            vals.append(val)
+
+        self.cursor.execute('SELECT * FROM members {0} '.format(where_command), vals)
+        rows = self.cursor.fetchall()
+        if len(rows) == 0:
+            return '', None, 0
+        elif len(rows) > 1:
+            return '', None, 2
+        else:
+            return where_command, vals, rows[0]
 
     def add(self, name='', userid='', slack_id='', email='', role='', is_away='', permission=''):
         if name == '':
@@ -69,21 +96,20 @@ class GroupMember(action.Action):
             raise action.BadInputError("What is their Slack ID?"
                                        " If you don't know, just write `None`",
                                        args=(name, userid))
-        if email not in ['', 'None']:
+        if email == '':
             raise action.BadInputError('What is their email address?',
                                        args=(name, userid, slack_id))
 
-        roles = ['undergrad', 'Master\'s', 'PhD', 'Postdoc', 'Professor']
-        if role == '' or role not in roles:
+        if not self.is_valid_role(role):
             raise action.BadInputError('What is their role in the group?'
-                                       ' It should be one of {0}.'.format(roles),
+                                       ' It should be one of {0}.'.format(self.valid_roles),
                                        args=(name, userid, slack_id, email))
-        if is_away == '' and is_away in ['yes', 'no']:
+        if is_away == '' or is_away not in ['yes', 'no']:
             raise action.BadInputError('Are they away from the lab? It should be one of "yes" or "no".',
                                        args=(name, userid, slack_id, email, role))
         dates_away = ''
         if is_away == 'yes':
-            dates_away = '(9999-12-31:{0})'.format(date.today().isoformat())
+            dates_away = '({0}:{1})'.format(date.max, date.today())
         elif is_away == 'no':
             dates_away = ''
 
@@ -100,6 +126,74 @@ class GroupMember(action.Action):
                             (name, userid, slack_id, email, role, dates_away, permission))
         self.db_conn.commit()
 
+    def add_away(self, from_date='', to_date='', *identifiers):
+        try:
+            if from_date in ['NA', 'N/A']:
+                from_date = date.today()
+            else:
+                from_date = datetime.strptime(from_date, '%Y-%m-%d').date()
+        except ValueError:
+            raise action.BadInputError('From what date will this person be away?'
+                                       ' You should give the date in the form yyyy-mm-dd.'
+                                       " If you don't know the exact date, say `N/A`.")
+        try:
+            if to_date in ['NA', 'N/A']:
+                to_date = datetime.max.date()
+            else:
+                to_date = datetime.strptime(to_date, '%Y-%m-%d').date()
+        except ValueError:
+            raise action.BadInputError('To what date will this person be away?'
+                                       " If you don't know the exact date, say `N/A`",
+                                       args=(str(from_date),))
+
+        if from_date > to_date:
+            raise action.Messaging("I can't understand the dates you've given."
+                                   " You will be away from {0} to {1}?"
+                                   " Please try again.".format(from_date,
+                                                               to_date))
+        if len(identifiers) == 0:
+            raise action.BadInputError('Who is this person?'
+                                       ' Could you tell me the one or more of {0}?'
+                                       ' And could you delimit the value with `=`?'
+                                       ' For example, `name=ayersbot`.'.format(self.col_ids.keys()),
+                                       args=(str(from_date), str(to_date)))
+
+        where_command, vals, row = self._find_from_identifiers(*identifiers)
+        if where_command == '' and row == 0:
+            raise action.BadInputError('I could not find anyone using {0}'.format(identifiers))
+        elif where_command == '' and row == 1:
+            raise action.BadInputError('There seems to be more than one person that'
+                                       ' satisfies {0}. Could you give more information'
+                                       ' on the person?'.format(identifiers),
+                                       args=(str(from_date), str(to_date)) + tuple(identifiers))
+
+        old_dates = re.findall(r'\d\d\d\d-\d\d-\d\d', row[self.col_ids['dates_away']])
+        old_dates = [datetime.strptime(i, '%Y-%m-%d').date() for i in old_dates]
+
+        old_to_dates = old_dates[0::2]
+        old_from_dates = old_dates[0::1]
+        old_dates = sorted(zip(old_to_dates, old_from_dates), key=lambda x:x[0])
+
+        new_dates = []
+        for old_to_date, old_from_date in old_dates:
+            if old_from_date == from_date <= to_date < old_to_date == date.max:
+                new_dates.append('({0},{1})'.format(to_date, from_date))
+            elif from_date <= to_date < old_from_date <= old_to_date:
+                new_dates.append('({0},{1})'.format(to_date, from_date))
+                new_dates.append('({0},{1})'.format(old_to_date, old_from_date))
+            elif old_from_date <= old_to_date < from_date <= to_date:
+                new_dates.append('({0},{1})'.format(old_to_date, old_from_date))
+                new_dates.append('({0},{1})'.format(to_date, from_date))
+            else:
+                raise action.Messaging('The dates you have given overlaps'
+                                       ' with the dates already recorded')
+        if len(old_dates) == 0:
+            new_dates.append('({0},{1})'.format(to_date, from_date))
+
+        self.cursor.execute('UPDATE members SET {0}=? {1}'.format('dates_away', where_command),
+                            [','.join(new_dates),] + vals)
+        self.db_conn.commit()
+
     def modify(self, item='', to_val='', *identifiers):
         if item == '' or item not in self.col_ids.keys():
             raise action.BadInputError('What would you like to change? It should be'
@@ -107,6 +201,11 @@ class GroupMember(action.Action):
         if to_val == '':
             raise action.BadInputError('What would you like to change it to?',
                                        args=(item,))
+
+        if item == 'role' and self.is_valid_role(to_val): 
+            raise action.BadInputError('The role must be one of {0}'.format(self.valid_roles),
+                                       args=(item,))
+
         if len(identifiers) == 0:
             raise action.BadInputError('Can you tell me more about this person?'
                                        ' Could you tell me the one or more of {0}}?'
@@ -114,26 +213,18 @@ class GroupMember(action.Action):
                                        ' For example, `name=ayersbot`.'.format(self.col_ids.keys()),
                                        args=(item, to_val))
 
-        where_command = ' WHERE '
-        vals = []
-        for identifier in identifiers:
-            key, val = identifier.split('=')
-            where_command += '{0}=? '.format(key)
-            vals.append(val)
-
-        self.cursor.execute('SELECT * FROM members'+where_command, vals)
-        rows = self.cursor.fetchall()
-        if len(rows) == 0:
+        where_command, vals, row = self._find_from_identifiers(*identifiers)
+        if where_command == '' and row == 0:
             raise action.BadInputError('I could not find anyone using {0}'.format(identifiers))
-        elif len(rows) > 1:
+        elif where_command == '' and row == 1:
             raise action.BadInputError('There seems to be more than one person that'
                                        ' satisfies {0}. Could you give more information'
                                        ' on the person?'.format(identifiers),
                                        args=(item, to_val) + tuple(identifiers))
-        # update table
-        self.cursor.execute('UPDATE members SET {0}=?'.format(item)+where_command,
-                            [to_val,]+vals)
-        self.db_conn.commit()
+        else:
+            self.cursor.execute('UPDATE members SET {0}=? {1}'.format(item, where_command),
+                                [to_val,]+vals)
+            self.db_conn.commit()
 
     def list(self, *column_identifiers):
         col_names =  {'id':'Database ID',
@@ -146,14 +237,14 @@ class GroupMember(action.Action):
                       'is_away':'Away?',
                       'permission':'Permission'}
         col_formats = {'id':'{:<4}',
-                       'name':'{:>30}',
-                       'userid':'{:>10}',
-                       'slack_id':'{:>20}',
-                       'email':'{:>40}',
-                       'role':'{:>20}',
-                       'dates_away':'{:>15}',
-                       'is_away':'{:>15}',
-                       'permission':'{:>12}'}
+                       'name':'{:<30}',
+                       'userid':'{:<10}',
+                       'slack_id':'{:<20}',
+                       'email':'{:<40}',
+                       'role':'{:<20}',
+                       'dates_away':'{:<15}',
+                       'is_away':'{:<15}',
+                       'permission':'{:<12}'}
 
         if len(column_identifiers) == 0:
             # column_identifiers = ['id', 'name', 'userid', 'email', 'role', 'is_away', 'permission']
@@ -172,9 +263,9 @@ class GroupMember(action.Action):
                     from_dates = dates[1::2]
                     is_away = 'no'
                     for to_date, from_date in zip(to_dates, from_dates):
-                        to_date = datetime.strptime(to_date, '%Y-%m-%d')
-                        from_date = datetime.strptime(from_date, '%Y-%m-%d')
-                        if from_date <= datetime.today() < to_date:
+                        to_date = datetime.strptime(to_date, '%Y-%m-%d').date()
+                        from_date = datetime.strptime(from_date, '%Y-%m-%d').date()
+                        if from_date <= date.today() < to_date:
                             is_away = 'yes'
                             break
                     row_data.append(is_away)
@@ -199,13 +290,18 @@ class GroupMember(action.Action):
             except KeyError:
                 return ''
         for i in self.actor.slack_client.api_call('users.list')['members']:
+            # check if already in database
+            self.cursor.execute("SELECT rowid FROM members WHERE userid = ?", (i['name'],))
+            if self.cursor.fetchone():
+                continue
+
             names.append(check(i['profile'], 'real_name'))
             userids.append(i['name'])
             slack_ids.append(i['id'])
             emails.append(check(i['profile'], 'email'))
             roles.append('')
             if 'status' not in i:
-                away_dates.append('(9999-12-31:{0})'.format(date.today().isoformat()))
+                away_dates.append('({0}:{1})'.format(date.max, date.today()))
             else:
                 away_dates.append('')
             permissions.append('user')
