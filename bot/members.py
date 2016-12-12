@@ -7,17 +7,19 @@ import re
 from datetime import datetime, date
 from .action import Action
 from .brain import BadInput, Messaging
+from .utils import nice_options, where_from_identifiers
 
 class GroupMember(Action):
     """ Action class for group member management
     """
-    def __init__(self, db_conn):
+    def __init__(self, actor, db_conn):
         """
         Parameters
         ----------
         db_conn : sqlite3.Connection
             Database object
         """
+        self.actor = actor
         self.db_conn = db_conn
         self.cursor = self.db_conn.cursor()
         self.cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
@@ -48,8 +50,8 @@ class GroupMember(Action):
 
     @property
     def init_response(self):
-        return ('I can only do one of {0}'
-                ' when managing group members').format(self.options.keys())
+        return ('I can only do one of {0} when managing group members'
+                ''.format(nice_options(self.options.keys(), 'or')))
 
     @property
     def options(self):
@@ -58,53 +60,66 @@ class GroupMember(Action):
 
     @property
     def valid_roles(self):
-        return ['undergrad', 'Master\'s', 'PhD', 'Postdoc', 'Professor']
+        """ List of valid roles
+        """
+        return ['Undergrad', 'Master\'s', 'PhD', 'Postdoc', 'Professor']
 
     def is_valid_role(self, role):
-        if role in self.valid_roles:
-            return True
-        else:
-            return False
+        """ Checks if given rolid is valid
 
-    def _find_from_identifiers(self, *identifiers):
-        where_command = 'WHERE '
-        vals = []
-        for identifier in identifiers:
-            key, val = identifier.split('=')
-            where_command += '{0}=? '.format(key)
-            vals.append(val)
+        Parameters
+        ----------
+        role : str
 
-        self.cursor.execute('SELECT * FROM members {0} '.format(where_command), vals)
-        rows = self.cursor.fetchall()
-        if len(rows) == 0:
-            return '', None, 0
-        elif len(rows) > 1:
-            return '', None, 2
-        else:
-            return where_command, vals, rows[0]
+        Returns
+        -------
+        True if valid
+        False if not
+        """
+        return role in (i.lower() for i in self.valid_roles)
 
     def add(self, name='', userid='', slack_id='', email='', role='', is_away='', permission=''):
+        """ Adds a member to the database
+
+        Parameters
+        ----------
+        name : str
+            Name of person
+        userid : str
+            (Slack) User ID of person
+        slack_id : str
+            Slack (client) ID
+            Used within Slack client to distinguish person (Not the same as userid)
+        email : str
+            Email of person
+        role : str
+            Role of person
+            One of 'Undergrad', "Master's", "PhD", "Postdoc", "Professor"
+        is_away : str
+            Is the person away from the lab at the moment?
+        permission : str
+            Permission of person
+        """
         if name == '':
             raise BadInput('What is their name?')
         if userid == '':
             raise BadInput("What is their Slack username?"
-                                       " If you don't know, just write `None`.",
-                                       args=(name,))
+                           " If you don't know, just write `None`.",
+                           args=(name,))
         if slack_id == '':
             raise BadInput("What is their Slack ID?"
-                                       " If you don't know, just write `None`",
-                                       args=(name, userid))
+                           " If you don't know, just write `None`",
+                           args=(name, userid))
         if email == '':
             raise BadInput('What is their email address?',
-                                       args=(name, userid, slack_id))
-
+                           args=(name, userid, slack_id))
         if not self.is_valid_role(role):
-            raise BadInput('What is their role in the group?'
-                                       ' It should be one of {0}.'.format(self.valid_roles),
-                                       args=(name, userid, slack_id, email))
+            raise BadInput('What is their role in the group? It should be one of {0}.'
+                           ''.format(nice_options(self.valid_roles)),
+                           args=(name, userid, slack_id, email))
         if is_away == '' or is_away not in ['yes', 'no']:
             raise BadInput('Are they away from the lab? It should be one of "yes" or "no".',
-                                       args=(name, userid, slack_id, email, role))
+                           args=(name, userid, slack_id, email, role))
         dates_away = ''
         if is_away == 'yes':
             dates_away = '({0}:{1})'.format(date.max, date.today())
@@ -113,9 +128,9 @@ class GroupMember(Action):
 
         permission = 'user'
 
-        if userid == 'None':
+        if userid.lower() == 'none':
             userid = ''
-        if slack_id == 'None':
+        if slack_id.lower() == 'none':
             slack_id = ''
 
         self.cursor.execute('INSERT INTO members'
@@ -125,53 +140,76 @@ class GroupMember(Action):
         self.db_conn.commit()
 
     def add_away(self, from_date='', to_date='', *identifiers):
+        """ Add the date from and to which a person will be away
+
+        Parameters
+        ----------
+        from_date : str
+            Date in the form yyyy-mm-dd
+        to_date : str
+            Date in the form yyyy-mm-dd
+        identifiers : list
+            
+        """
+        # check from_date
+        if from_date in ['NA', 'N/A']:
+            from_date = date.today()
         try:
-            if from_date in ['NA', 'N/A']:
-                from_date = date.today()
-            else:
-                from_date = datetime.strptime(from_date, '%Y-%m-%d').date()
+            from_date = datetime.strptime(str(from_date), '%Y-%m-%d').date()
         except ValueError:
             raise BadInput('From what date will this person be away?'
-                                       ' You should give the date in the form yyyy-mm-dd.'
-                                       " If you don't know the exact date, say `N/A`.")
+                           ' You should give the date in the form yyyy-mm-dd.'
+                           " If you don't know the exact date, say `N/A`.")
+        # check to_date
+        if to_date in ['NA', 'N/A']:
+            to_date = datetime.max.date()
         try:
-            if to_date in ['NA', 'N/A']:
-                to_date = datetime.max.date()
-            else:
-                to_date = datetime.strptime(to_date, '%Y-%m-%d').date()
+            to_date = datetime.strptime(str(to_date), '%Y-%m-%d').date()
         except ValueError:
             raise BadInput('To what date will this person be away?'
-                                       " If you don't know the exact date, say `N/A`",
-                                       args=(str(from_date),))
-
+                           " If you don't know the exact date, say `N/A`",
+                           args=(str(from_date),))
+        # check if from_date and to_date are consistent
         if from_date > to_date:
             raise Messaging("I can't understand the dates you've given."
-                                   " You will be away from {0} to {1}?"
-                                   " Please try again.".format(from_date,
-                                                               to_date))
+                            " You will be away from {0} to {1}?"
+                            " Please try again.".format(from_date, to_date))
+        # check identifier
         if len(identifiers) == 0:
-            raise BadInput('Who is this person?'
-                                       ' Could you tell me the one or more of {0}?'
-                                       ' And could you delimit the value with `=`?'
-                                       ' For example, `name=ayersbot`.'.format(self.col_ids.keys()),
-                                       args=(str(from_date), str(to_date)))
+            raise BadInput('What can you tell me about this person?'
+                           ' You can give me one of {0}.'
+                           ''.format(nice_options(self.col_ids.keys())),
+                           args=(str(from_date), str(to_date)))
+        elif len(identifiers) % 2 == 1:
+            raise BadInput('What is the {0} of this person?'
+                           ''.format(identifiers[-1]),
+                           args=(str(from_date), str(to_date)) + tuple(identifiers))
 
-        where_command, vals, row = self._find_from_identifiers(*identifiers)
-        if where_command == '' and row == 0:
-            raise BadInput('I could not find anyone using {0}'.format(identifiers))
-        elif where_command == '' and row == 1:
-            raise BadInput('There seems to be more than one person that'
-                                       ' satisfies {0}. Could you give more information'
-                                       ' on the person?'.format(identifiers),
-                                       args=(str(from_date), str(to_date)) + tuple(identifiers))
+        # get and check where command
+        where_command, vals = where_from_identifiers('group_meetings', *identifiers)
+        self.cursor.execute('SELECT * FROM group_meetings {0} '.format(where_command), vals)
+        rows = self.cursor.fetchall()
+        if len(rows) == 0:
+            messages = ['{0} is {1}' for i in identifiers]
+            raise Messaging('I could not find anyone whose {0}'
+                            ''.format(nice_options(messages, 'and')))
+        elif len(rows) > 1:
+            messages = ['{0} is {1}' for i in identifiers]
+            raise BadInput('There seems to be more than one person whose {0}.'
+                           ' Could you tell me more about this person?'
+                           ' You can give me one of {1}.'
+                           ''.format(nice_options(messages, 'and'),
+                                     nice_options(self.col_ids.keys())),
+                           args=(str(from_date), str(to_date)) + tuple(identifiers))
 
-        old_dates = re.findall(r'\d\d\d\d-\d\d-\d\d', row[self.col_ids['dates_away']])
+        # get dates
+        old_dates = re.findall(r'\d\d\d\d-\d\d-\d\d', rows[0][self.col_ids['dates_away']])
         old_dates = [datetime.strptime(i, '%Y-%m-%d').date() for i in old_dates]
-
+        # sort
         old_to_dates = old_dates[0::2]
         old_from_dates = old_dates[0::1]
-        old_dates = sorted(zip(old_to_dates, old_from_dates), key=lambda x:x[0])
-
+        old_dates = sorted(zip(old_to_dates, old_from_dates), key=lambda x: x[0])
+        # get new dates
         new_dates = []
         for old_to_date, old_from_date in old_dates:
             if old_from_date == from_date <= to_date < old_to_date == date.max:
@@ -183,48 +221,80 @@ class GroupMember(Action):
                 new_dates.append('({0},{1})'.format(old_to_date, old_from_date))
                 new_dates.append('({0},{1})'.format(to_date, from_date))
             else:
-                raise Messaging('The dates you have given overlaps'
-                                       ' with the dates already recorded')
+                raise Messaging('The dates you have given overlaps with the dates'
+                                ' already recorded')
         if len(old_dates) == 0:
             new_dates.append('({0},{1})'.format(to_date, from_date))
 
-        self.cursor.execute('UPDATE members SET {0}=? {1}'.format('dates_away', where_command),
-                            [','.join(new_dates),] + vals)
+        # change database
+        self.cursor.execute('UPDATE members SET dates_away=? id=?'
+                            (','.join(new_dates), rows[0][0]))
         self.db_conn.commit()
 
     def modify(self, item='', to_val='', *identifiers):
+        """ Modifies existing member data
+
+        Parameters
+        ----------
+        item : str
+            One of 'id', 'name', 'userid', 'slack_id', 'email', 'role', 'dates_away'
+            or 'permission'
+        to_val : str
+            Value to change to
+        identifiers : list
+            List of alternating key and value of the person
+        """
         if item == '' or item not in self.col_ids.keys():
             raise BadInput('What would you like to change? It should be'
-                                       ' one of {0}'.format(self.col_ids.keys()))
+                           ' one of {0}'.format(nice_options(self.col_ids.keys())))
         if to_val == '':
             raise BadInput('What would you like to change it to?',
-                                       args=(item,))
+                           args=(item,))
 
         if item == 'role' and self.is_valid_role(to_val):
             raise BadInput('The role must be one of {0}'.format(self.valid_roles),
-                                       args=(item,))
+                           args=(item,))
 
+        # check identifier
         if len(identifiers) == 0:
-            raise BadInput('Can you tell me more about this person?'
-                                       ' Could you tell me the one or more of {0}}?'
-                                       ' And could you delimit the value with `=`?'
-                                       ' For example, `name=ayersbot`.'.format(self.col_ids.keys()),
-                                       args=(item, to_val))
+            raise BadInput('What can you tell me about this person?'
+                           ' You can give me one of {0}.'
+                           ''.format(nice_options(self.col_ids.keys())),
+                           args=(item, to_val))
+        elif len(identifiers) % 2 == 1:
+            raise BadInput('What is the {0} of this person?'
+                           ''.format(identifiers[-1]),
+                           args=(item, to_val) + tuple(identifiers))
 
-        where_command, vals, row = self._find_from_identifiers(*identifiers)
-        if where_command == '' and row == 0:
-            raise BadInput('I could not find anyone using {0}'.format(identifiers))
-        elif where_command == '' and row == 1:
-            raise BadInput('There seems to be more than one person that'
-                                       ' satisfies {0}. Could you give more information'
-                                       ' on the person?'.format(identifiers),
-                                       args=(item, to_val) + tuple(identifiers))
+        where_command, vals = where_from_identifiers(*identifiers)
+        self.cursor.execute('SELECT * FROM group_meetings {0} '.format(where_command), vals)
+        rows = self.cursor.fetchall()
+        if len(rows) == 0:
+            messages = ['{0} is {1}' for i in identifiers]
+            raise Messaging('I could not find anyone whose {0}'
+                            ''.format(nice_options(messages, 'and')))
+        elif len(rows) > 1:
+            messages = ['{0} is {1}' for i in identifiers]
+            raise BadInput('There seems to be more than one person whose {0}.'
+                           ' Could you tell me more about this person?'
+                           ' You can give me one of {1}.'
+                           ''.format(nice_options(messages, 'and'),
+                                     nice_options(self.col_ids.keys())),
+                           args=(item, to_val) + tuple(identifiers))
         else:
-            self.cursor.execute('UPDATE members SET {0}=? {1}'.format(item, where_command),
-                                [to_val,]+vals)
+            self.cursor.execute('UPDATE members SET {0}=? WHERE id=?'.format(item),
+                                (to_val, rows[0][0]))
             self.db_conn.commit()
 
     def list(self, *column_identifiers):
+        """ Lists the group members
+
+        Parameters
+        ----------
+        column_identifiers : list
+            List of columns that will be used to construct the list
+
+        """
         col_names =  {'id':'Database ID',
                       'name':'Name',
                       'userid':'User ID',
@@ -246,7 +316,8 @@ class GroupMember(Action):
 
         if len(column_identifiers) == 0:
             # column_identifiers = ['id', 'name', 'userid', 'email', 'role', 'is_away', 'permission']
-            column_identifiers = ['id', 'name', 'userid', 'slack_id', 'email', 'role', 'dates_away', 'is_away', 'permission']
+            column_identifiers = ['id', 'name', 'userid', 'slack_id', 'email',
+                                  'role', 'dates_away', 'is_away', 'permission']
 
         message_format = u''.join(col_formats[i] for i in column_identifiers) + u'\n'
         message = message_format.format(*[col_names[i] for i in column_identifiers])
@@ -275,6 +346,8 @@ class GroupMember(Action):
         raise Messaging(message)
 
     def import_from_slack(self):
+        """ Imports the group member information from Slack Client
+        """
         names = []
         userids = []
         slack_ids = []
@@ -282,7 +355,14 @@ class GroupMember(Action):
         roles = []
         away_dates = []
         permissions = []
-        def check(profile, text):
+        def _check(profile, text):
+            """ Checks if a dictionary has some text
+
+            Parameters
+            ----------
+            profile : dict
+            text : str
+            """
             try:
                 return profile[text]
             except KeyError:
@@ -293,10 +373,10 @@ class GroupMember(Action):
             if self.cursor.fetchone():
                 continue
 
-            names.append(check(i['profile'], 'real_name'))
+            names.append(_check(i['profile'], 'real_name'))
             userids.append(i['name'])
             slack_ids.append(i['id'])
-            emails.append(check(i['profile'], 'email'))
+            emails.append(_check(i['profile'], 'email'))
             roles.append('')
             if 'status' not in i:
                 away_dates.append('({0}:{1})'.format(date.max, date.today()))
