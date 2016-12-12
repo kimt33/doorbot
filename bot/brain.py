@@ -8,7 +8,7 @@ import shlex
 import sqlite3
 from . import ear
 from . import mouth
-from .action import Messaging
+from .action import BadInput, Messaging
 from .timed_action import TimedAction
 from .members import GroupMember
 from .group_meeting import GroupMeeting
@@ -37,9 +37,9 @@ class Brain(object):
         self.slack_client = slack_client
         self.db_conn = sqlite3.connect('ayerslab.db')
         self.cursor = self.db_conn.cursor()
-        self.actions = {i.name:i for i in [GroupMeeting(self, self.db_conn),
+        self.actions = {i.name:i for i in [GroupMember(self, self.db_conn),
                                            TimedAction(self),
-                                           GroupMember(self.db_conn),]}
+                                           GroupMeeting(self.db_conn),]}
         self.timed_actions = {}
         self.conversations = {}
         # TODO: add status channel
@@ -186,22 +186,21 @@ class Brain(object):
         # find parameters
         command = command.strip()
         parameters = old_conv[2:]
-        if command[0] in ["'", '"'] and command[-1] == command[0]:
+        if len(command) > 2 and command[0] in ["'", '"'] and command[-1] == command[0]:
             parameters += tuple(shlex.split(command[1:-1]))
-        else:
-            parameters += (command.strip(),)
+        elif command != '':
+            parameters += (command,)
 
         # act
         try:
             action.options[option](*parameters)
             self.speak(channel, 'Done!')
             del self.conversations[channel]
-        except BadInput, e:
-            message = str(e.msg) # + '\nMake sure you delimit the commands with spaces.'
-            self.speak(channel, message)
-            self.conversations[channel] = self.conversations[channel][:4] + e.args
-        except Messaging, e:
-            self.speak(channel, e.msg)
+        except BadInput, handler:
+            self.speak(channel, handler.message)
+            self.conversations[channel] = self.conversations[channel][:4] + handler.args
+        except Messaging, handler:
+            self.speak(channel, handler.message)
             del self.conversations[channel]
 
     def timed_process(self, time):
