@@ -3,14 +3,15 @@
 Takes commands from Slack client and translate them into script
 
 """
-import datetime
-import sqlite3
+import re
+from datetime import datetime, date, timedelta
+from random import random
 from . import action
 
 class GroupMeeting(action.Action):
     """ Action class for group meeting management
     """
-    def __init__(self, actor, db='groupmeetings.db'):
+    def __init__(self, actor):
         """
         Parameters
         ----------
@@ -20,13 +21,23 @@ class GroupMeeting(action.Action):
             Name of the database file
         """
         super(GroupMeeting, self).__init__(actor)
-        self.db_conn = sqlite3.connect(db)
-        self.cursor = self.db_conn.cursor()
+        self.db_conn = self.actor.db_conn
+        self.cursor = self.actor.cursor
         self.cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
         if u'group_meetings' not in (j for i in self.cursor.fetchall() for j in i):
             self.cursor.execute('''CREATE TABLE group_meetings
-            (date text, presenter text, chair text, title text)''')
+            (id INTEGER PRIMARY KEY,
+             date TEXT NOT NULL,
+             presenter INTEGER,
+             chair INTEGER,
+             title TEXT)''')
             self.db_conn.commit()
+        # FIXME: there should be a better way for this
+        self.col_ids = {'id':0,
+                        'date':1,
+                        'presenter':2,
+                        'slack_chair':3,
+                        'title':4,}
 
     @property
     def name(self):
@@ -39,11 +50,37 @@ class GroupMeeting(action.Action):
 
     @property
     def options(self):
-        return {'select' : self.select_member,
-                'modify' : self.modify,
+        return {'add' : self.add,
                 'recount' : self.recount}
 
-    def select_member(self, criteria='', job='', date=''):
+    def is_valid_date(self, date_str):
+        if date_str in ['next']:
+            return True
+        try:
+            datetime.strptime(date_str, '%Y-%m-%d').date()
+            return True
+        except ValueError:
+            return False
+
+    def _find_from_identifiers(self, *identifiers):
+        where_command = ''
+        vals = []
+        if len(identifiers) > 0:
+            where_command += 'WHERE '
+            keys = identifiers[0::2]
+            vals = identifiers[1::2]
+            for key in keys:
+                where_command += '{0}=? '.format(key)
+
+        self.cursor.execute('SELECT * FROM group_meetings {0} '.format(where_command), vals)
+        rows = self.cursor.fetchall()
+        return where_command, vals, rows
+
+
+    def select_member_volunteer(self, job='', date_str=''):
+        pass
+
+    def select_member_random(self, date_obj, job):
         """ Selects member
 
         Parameters
@@ -58,64 +95,131 @@ class GroupMeeting(action.Action):
             Date of presentation
             'next' or 'yyyy/mm/dd'
         """
-        error_msg = ''
-        if criteria not in ['random', 'volunteer', 'myself']:
-            raise action.BadInputError('First option controls how the job will be assigned.'
-                                       ' It must be one of "random", "volunteer" or "myself".\n')
+        # find people that are present
+        people_present = []
+        for row in self.cursor.execute('SELECT id, name, dates_away FROM members'):
+            dates = re.findall(r'\d\d\d\d-\d\d-\d\d', row[2])[:2]
+            dates = [datetime.strptime(i, '%Y-%m-%d').date() for i in dates]
+            to_dates = dates[0::2]
+            from_dates = dates[0::1]
+            for to_date, from_date in zip(to_dates, from_dates):
+                if to_date < date_obj:
+                    # ASSUME away_dates are in descending order
+                    # there is no need to loop through all dates if a date is
+                    # we find a valid date
+                    people_present.append(row[0])
+                    break
+                elif from_date <= date_obj <= to_date:
+                    # if person is away on that day, break out of loop
+                    break
+            else:
+                # if end of for loop reached
+                people_present.append(row[0])
+
+        # find time since last presentation
+        time_since_last = []
+        for i in people_present:
+            self.cursor.execute('SELECT * FROM group_meetings WHERE {0}=?'
+                                ' ORDER BY date DESC'.format(job), (i,))
+            last_date = self.cursor.fetchone()
+            if last_date in [None, '']:
+                last_date = datetime.min.date()
+            else:
+                last_date = datetime.strptime(last_date[1], '%Y-%m-%d').date()
+            time_since_last.append((date_obj - last_date).days)
+        time_since_last = [i if i>27 else 0 for i in time_since_last]
+
+        # you can't present and chair at the same time
+        other = ''
+        if job == 'presenter':
+            other = 'chair'
+        elif job == 'chair':
+            other = 'presenter'
+        self.cursor.execute("SELECT {0} FROM group_meetings WHERE date=? "
+                            " AND ({1} is null OR {1}='')".format(other, job),
+                            (date_obj.isoformat(), ))
+        other = self.cursor.fetchone()
+        if other not in ['', None]:
+            time_since_last[people_present.index(other[0])] = 0
+
+        # turn timedelta into weight
+        probs = [weight*random() for weight in time_since_last]
+        # normalize
+        probs = [prob/sum(probs) for prob in probs]
+
+        # winner
+        return people_present[probs.index(max(probs))]
+
+    def add(self, date_str='', job='', person=''):
+        if not self.is_valid_date(date_str):
+            raise action.BadInputError('What is the date of the presentaton?'
+                                       ' It must be one of "next" or "yyyy-mm-dd".')
+
+        # get the data
+        self.cursor.execute('SELECT * FROM group_meetings ORDER BY date')
+        rows = self.cursor.fetchall()
+
+        # find the date
+        date_obj = None
+        if date_str == 'next':
+            last_date = datetime.strptime(rows[-1][1], '%Y-%m-%d').weekday()
+            weekday_diff = datetime.today().weekday() - last_date
+            date_obj = datetime.today().date() + timedelta(7) + weekday_diff
+            # FIXME: message
+        else:
+            date_obj = datetime.strptime(date_str, '%Y-%m-%d').date()
+
         if job not in ['presenter', 'chair']:
-            raise action.BadInputError('Second option controls the job that will be assigned.'
-                                       ' It must be one of "presenter" or "chair".\n',
-                                       args=(criteria,))
-        if date == 'next':
-            # FIXME:
-            pass
+            raise action.BadInputError('What job would you like me to assign?'
+                                       ' It must be one of "presenter" or "chair".',
+                                       args=(date_str,))
+
+        if person == '':
+            raise action.BadInputError('Who would you like to assign?'
+                                       ' It should be a name or "random"',
+                                       args=(date_str, job, ))
+
+        if person == 'random':
+            person = self.select_member_random(date_obj, job)
+        self.cursor.execute('SELECT id FROM members WHERE id=?'
+                            ' or name=? or userid=? or slack_id=?',
+                            (person, )*4)
+        matches = self.cursor.fetchall()
+        if len(matches) == 0:
+            raise action.BadInputError('I could not find anyone whose id, name,'
+                                       ' userid, or slackid is {0}.\n'
+                                       'Would you care to try again?'.format(person),
+                                       args=(date_str, job,))
+        elif len(matches) > 1:
+            raise action.BadInputError('I found more than one person whose id, name,'
+                                       ' userid, or slackid is {0}.\n'
+                                       'Would you care to try again?'.format(person),
+                                       args=(date_str, job,))
         else:
-            try:
-                year, month, day = [int(i) for i in date.split('-')]
-            except (ValueError, TypeError):
-                error_msg += ('Third option controls the date of the presentation.'
-                              ' It must be one of "next" or "yyyy-mm-dd".\n')
-        if error_msg != '':
-            raise action.BadInputError(error_msg)
-
-
-
-    def modify(self, item='', to_val='', *identifiers):
-        """ Modifies existing presentation information
-
-        Parameters
-        ----------
-        item : str
-            Parameter that will be modified
-            One of ['presenter', 'chair', 'title', 'date']
-        to_val : str
-            Value to which it will be changed
-        identifiers : list
-            Identifier of the presentation that will be modified
-            Each entry is string where ':' delimits the identifier from value
-            e.g. ['presenter:name', 'chair:name']
-
-        """
-        error_msg = ''
-        if item == '' or to_val == '' or len(identifiers) == 0:
-           error_msg += 'I will help you modify a group meeting.\n'
-        if item not in ['presenter', 'chair', 'title', 'date']:
-            error_msg += ('First option controls what is being modified.'
-                          ' It must be one of "presenter", "chair", "title", or "date".\n')
-        if to_val == '':
-            error_msg += ('Second option is the value to which the item will be changed.\n')
-        for i in identifiers:
-            if i.split(':')[0] not in ['presenter', 'chair', 'title', 'date']:
-                error_msg += ('Third option onwards are the identifiers of the presentation'
-                              ' that will be modified.'
-                              ' Each identifier must be one of "presenter", "chair", "title", or "date".'
-                              ' The value of each identifier is delimited by ":".'
-                              ' For example, "presenter:person1 chair:person2"\n')
-                break
+            person = matches[0][0]
+        
+        # Add data
+        self.cursor.execute('SELECT * FROM group_meetings WHERE date=?',
+                            date_obj.isoformat())
+        rows = self.cursor.fetchall()
+        print rows
+        print len(rows)
+        if len(rows) == 0:
+            self.cursor.execute('INSERT INTO group_meetings (date, {0})'
+                                ' VALUES (?,?)'.format(job),
+                                (date_obj.isoformat(), person))
+        elif len(rows) == 1:
+            if rows[0][self.col_ids[job]] in [None, '']:
+                self.cursor.execute('UPDATE group_meetings SET {0}=? WHERE id=?'.format(job),
+                                    (person, rows[0][self.col_ids['id']]))
+            else:
+                # FIXME
+                raise action.Messaging('There already is a person assigned.')
         else:
-            identifiers = {i:j for i,j in identifier.split(':') for identifier in identifiers}
-        if error_msg != '':
-            raise action.BadInputError(error_msg)
+            # FIXME
+            raise action.Messaging('There are more than one meetings to assign to.'
+                                   " I don't know what to do.")
+        self.db_conn.commit()
 
     def recount(self, *identifiers):
         """ Shows all presentations that satifies some conditions
@@ -128,61 +232,18 @@ class GroupMeeting(action.Action):
             e.g. ['presenter:name', 'chair:name']
 
         """
-        error_msg = ''
-        if len(identifiers) == 0:
-           error_msg += 'I will help you recount information on a group meeting.\n'
         for i in identifiers:
             if i.split(':')[0] not in ['presenter', 'chair', 'title', 'date']:
-                error_msg += ('All given options are the identifiers of a particular presentation.'
-                              ' Each identifier must be one of "presenter", "chair", "title", or "date".'
-                              ' The value of each identifier is delimited by ":".'
-                              ' For example, "presenter:person1 chair:person2"\n')
-                break
-        else:
-            identifiers = {i:j for i,j in identifier.split(':') for identifier in identifiers}
-        if error_msg != '':
-            raise action.BadInputError(error_msg)
-
-
-    def get_weights(self, date, weight_type='presenter'):
-        """ Assigns weights for the weighed probability distribution
-
-        Parameters
-        ----------
-        date : datetime.date
-        weight_type : {'presenter', 'chair'}
-            'presentation' gives weights for the presenter
-            'chair' gives weights for the chair
-
-        Returns
-        -------
-        weights
-            weights for each person
-
-        Raises
-        ------
-        AssertionError
-            If weight_type is not 'presenter' or 'chair'
-        """
-        if weight_type not in ['presenter', 'chair']:
-            raise ValueError('Given weight_type is not supported')
-        weeks_since = []
-        for person in self._presenters:
-            if (not person.is_away(date) and 
-                person.position not in ['undergrad', 'visiting', 'professor']):
-                if weight_type == 'presenter':
-                    dates_past = person.dates_presented +\
-                                 [i for i in person.dates_to_present if i<date]
-                elif weight_type == 'chair':
-                    dates_past = person.dates_chaired +\
-                                 [i for i in person.dates_to_chair if i<date]
-                num_weeks = datetime.timedelta(days=15)
-                if len(dates_past) != 0:
-                    num_weeks = min((date-dates_past[-1])/7, num_weeks)
-                weeks_since.append(num_weeks.days)
-            else:
-                weeks_since.append(0.)
-        weights = [i if i>3 else 0. for i in weeks_since]
-        return weights
-
-
+                raise action.BadInputError('All given options are the identifiers of a particular presentation.'
+                                           ' Each identifier must be one of "presenter", "chair", "title", or "date".'
+                                           ' The value of each identifier is delimited by "=".'
+                                           ' For example, "presenter:person1 chair:person2"\n')
+        where_command, vals, row = self._find_from_identifiers(*identifiers)
+        if where_command == '' and row == 0:
+            raise action.BadInputError('I could not find anyone using {0}'.format(identifiers))
+        self.cursor.execute('SELECT * FROM group_meetings ORDER BY date DESC {0}'
+                            ''.format(where_command))
+        rows = self.cursor.fetchall()
+        message = '{0:<4}{1:<10}{2:<20}{3:<20}{4:<40}\n'.format('id', 'date', 'presenter', 'chair', 'title')
+        message += '\n'.join('{0:<4}{1:<10}{2:<20}{3:<20}{4:<40}'.format(*row) for row in rows)
+        raise action.Messaging(message)

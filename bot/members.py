@@ -4,7 +4,7 @@ Takes commands from Slack client and translate them into script
 
 """
 import re
-from datetime import datetime, date, timedelta
+from datetime import datetime, date
 from . import action
 
 class GroupMember(action.Action):
@@ -202,7 +202,7 @@ class GroupMember(action.Action):
             raise action.BadInputError('What would you like to change it to?',
                                        args=(item,))
 
-        if item == 'role' and self.is_valid_role(to_val): 
+        if item == 'role' and self.is_valid_role(to_val):
             raise action.BadInputError('The role must be one of {0}'.format(self.valid_roles),
                                        args=(item,))
 
