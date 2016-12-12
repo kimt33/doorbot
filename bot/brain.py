@@ -37,9 +37,9 @@ class Brain(object):
         self.slack_client = slack_client
         self.db_conn = sqlite3.connect('ayerslab.db')
         self.cursor = self.db_conn.cursor()
-        self.actions = {i.name:i for i in [GroupMeeting(self),
+        self.actions = {i.name:i for i in [GroupMeeting(self.db_conn),
                                            TimedAction(self),
-                                           GroupMember(self),]}
+                                           GroupMember(self.db_conn),]}
         self.timed_actions = {}
         self.conversations = {}
         # TODO: add status channel

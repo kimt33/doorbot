@@ -26,11 +26,6 @@ class Action(object):
     """
     __metaclass__ = ABCMeta
 
-    def __init__(self, actor):
-        """ Initializer of action
-        """
-        self.actor = actor
-
     @abstractproperty
     def name(self):
         """ Name of action/functionality as seen by the user

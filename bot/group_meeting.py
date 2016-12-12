@@ -11,18 +11,15 @@ from . import action
 class GroupMeeting(action.Action):
     """ Action class for group meeting management
     """
-    def __init__(self, actor):
+    def __init__(self, db_conn):
         """
         Parameters
         ----------
-        actor : Brain
-            Brain instance that describes the acting bot
-        db : str
-            Name of the database file
+        db_conn : sqlite3.Connection
+            Database object
         """
-        super(GroupMeeting, self).__init__(actor)
-        self.db_conn = self.actor.db_conn
-        self.cursor = self.actor.cursor
+        self.db_conn = db_conn
+        self.cursor = self.db_conn.cursor()
         self.cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
         if u'group_meetings' not in (j for i in self.cursor.fetchall() for j in i):
             self.cursor.execute('''CREATE TABLE group_meetings

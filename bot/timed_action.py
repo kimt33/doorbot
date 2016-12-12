@@ -7,6 +7,16 @@ from .action import Action, BadInputError
 class TimedAction(Action):
     """ Action class for repeating actions
     """
+    def __init__(self, actor):
+        """ Initializer of action
+
+        Parameters
+        ----------
+        actor : Brain
+            Brain instance that describes the acting bot
+        """
+        self.actor = actor
+
     @property
     def name(self):
         return 'timing actions'
