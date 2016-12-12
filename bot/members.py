@@ -5,9 +5,10 @@ Takes commands from Slack client and translate them into script
 """
 import re
 from datetime import datetime, date
-from . import action
+from .action import Action
+from .brain import BadInput, Messaging
 
-class GroupMember(action.Action):
+class GroupMember(Action):
     """ Action class for group member management
     """
     def __init__(self, db_conn):
@@ -84,25 +85,25 @@ class GroupMember(action.Action):
 
     def add(self, name='', userid='', slack_id='', email='', role='', is_away='', permission=''):
         if name == '':
-            raise action.BadInputError('What is their name?')
+            raise BadInput('What is their name?')
         if userid == '':
-            raise action.BadInputError("What is their Slack username?"
+            raise BadInput("What is their Slack username?"
                                        " If you don't know, just write `None`.",
                                        args=(name,))
         if slack_id == '':
-            raise action.BadInputError("What is their Slack ID?"
+            raise BadInput("What is their Slack ID?"
                                        " If you don't know, just write `None`",
                                        args=(name, userid))
         if email == '':
-            raise action.BadInputError('What is their email address?',
+            raise BadInput('What is their email address?',
                                        args=(name, userid, slack_id))
 
         if not self.is_valid_role(role):
-            raise action.BadInputError('What is their role in the group?'
+            raise BadInput('What is their role in the group?'
                                        ' It should be one of {0}.'.format(self.valid_roles),
                                        args=(name, userid, slack_id, email))
         if is_away == '' or is_away not in ['yes', 'no']:
-            raise action.BadInputError('Are they away from the lab? It should be one of "yes" or "no".',
+            raise BadInput('Are they away from the lab? It should be one of "yes" or "no".',
                                        args=(name, userid, slack_id, email, role))
         dates_away = ''
         if is_away == 'yes':
@@ -130,7 +131,7 @@ class GroupMember(action.Action):
             else:
                 from_date = datetime.strptime(from_date, '%Y-%m-%d').date()
         except ValueError:
-            raise action.BadInputError('From what date will this person be away?'
+            raise BadInput('From what date will this person be away?'
                                        ' You should give the date in the form yyyy-mm-dd.'
                                        " If you don't know the exact date, say `N/A`.")
         try:
@@ -139,17 +140,17 @@ class GroupMember(action.Action):
             else:
                 to_date = datetime.strptime(to_date, '%Y-%m-%d').date()
         except ValueError:
-            raise action.BadInputError('To what date will this person be away?'
+            raise BadInput('To what date will this person be away?'
                                        " If you don't know the exact date, say `N/A`",
                                        args=(str(from_date),))
 
         if from_date > to_date:
-            raise action.Messaging("I can't understand the dates you've given."
+            raise Messaging("I can't understand the dates you've given."
                                    " You will be away from {0} to {1}?"
                                    " Please try again.".format(from_date,
                                                                to_date))
         if len(identifiers) == 0:
-            raise action.BadInputError('Who is this person?'
+            raise BadInput('Who is this person?'
                                        ' Could you tell me the one or more of {0}?'
                                        ' And could you delimit the value with `=`?'
                                        ' For example, `name=ayersbot`.'.format(self.col_ids.keys()),
@@ -157,9 +158,9 @@ class GroupMember(action.Action):
 
         where_command, vals, row = self._find_from_identifiers(*identifiers)
         if where_command == '' and row == 0:
-            raise action.BadInputError('I could not find anyone using {0}'.format(identifiers))
+            raise BadInput('I could not find anyone using {0}'.format(identifiers))
         elif where_command == '' and row == 1:
-            raise action.BadInputError('There seems to be more than one person that'
+            raise BadInput('There seems to be more than one person that'
                                        ' satisfies {0}. Could you give more information'
                                        ' on the person?'.format(identifiers),
                                        args=(str(from_date), str(to_date)) + tuple(identifiers))
@@ -182,7 +183,7 @@ class GroupMember(action.Action):
                 new_dates.append('({0},{1})'.format(old_to_date, old_from_date))
                 new_dates.append('({0},{1})'.format(to_date, from_date))
             else:
-                raise action.Messaging('The dates you have given overlaps'
+                raise Messaging('The dates you have given overlaps'
                                        ' with the dates already recorded')
         if len(old_dates) == 0:
             new_dates.append('({0},{1})'.format(to_date, from_date))
@@ -193,18 +194,18 @@ class GroupMember(action.Action):
 
     def modify(self, item='', to_val='', *identifiers):
         if item == '' or item not in self.col_ids.keys():
-            raise action.BadInputError('What would you like to change? It should be'
+            raise BadInput('What would you like to change? It should be'
                                        ' one of {0}'.format(self.col_ids.keys()))
         if to_val == '':
-            raise action.BadInputError('What would you like to change it to?',
+            raise BadInput('What would you like to change it to?',
                                        args=(item,))
 
         if item == 'role' and self.is_valid_role(to_val):
-            raise action.BadInputError('The role must be one of {0}'.format(self.valid_roles),
+            raise BadInput('The role must be one of {0}'.format(self.valid_roles),
                                        args=(item,))
 
         if len(identifiers) == 0:
-            raise action.BadInputError('Can you tell me more about this person?'
+            raise BadInput('Can you tell me more about this person?'
                                        ' Could you tell me the one or more of {0}}?'
                                        ' And could you delimit the value with `=`?'
                                        ' For example, `name=ayersbot`.'.format(self.col_ids.keys()),
@@ -212,9 +213,9 @@ class GroupMember(action.Action):
 
         where_command, vals, row = self._find_from_identifiers(*identifiers)
         if where_command == '' and row == 0:
-            raise action.BadInputError('I could not find anyone using {0}'.format(identifiers))
+            raise BadInput('I could not find anyone using {0}'.format(identifiers))
         elif where_command == '' and row == 1:
-            raise action.BadInputError('There seems to be more than one person that'
+            raise BadInput('There seems to be more than one person that'
                                        ' satisfies {0}. Could you give more information'
                                        ' on the person?'.format(identifiers),
                                        args=(item, to_val) + tuple(identifiers))
@@ -271,7 +272,7 @@ class GroupMember(action.Action):
                     row_data.append(row[index])
             # construct message
             message += message_format.format(*row_data)
-        raise action.Messaging(message)
+        raise Messaging(message)
 
     def import_from_slack(self):
         names = []

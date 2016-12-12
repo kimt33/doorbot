@@ -2,7 +2,8 @@
 
 """
 import time
-from .action import Action, BadInputError
+from .action import Action
+from .brain import BadInput
 
 class TimedAction(Action):
     """ Action class for repeating actions
@@ -43,7 +44,7 @@ class TimedAction(Action):
                     'Last Time: {4}\n'.format(action.name, option, inputs, interval, last_time))
         # I'm being lazy here. Because I need the channel to speak, but I think
         # channel should be independent of the action
-        raise BadInputError(msg)
+        raise BadInput(msg)
 
     def add(self, interval='', action='', *commands):
         """ Adds a new periodic function
@@ -62,7 +63,7 @@ class TimedAction(Action):
         """
         error_msg = ''
         if interval == '' or action == '' or len(commands) == 0:
-           error_msg += 'I will help you add timed actions.\n'
+            error_msg += 'I will help you add timed actions.\n'
         try:
             interval = int(interval)
         except (ValueError, IndexError):
@@ -74,7 +75,7 @@ class TimedAction(Action):
             error_msg += ('Second option onwards specify what is done.'
                           ' It must be one of {0}.\n'.format(allowed_actions))
         if error_msg != '':
-            raise BadInputError(error_msg)
+            raise BadInput(error_msg)
 
         action = self.actor.actions[action]
         option = commands[0]
@@ -100,6 +101,6 @@ class TimedAction(Action):
             error_msg += ('Repeat the command that you would like to remove.'
                           ' See `@ayerslab_bot timing actions recount` for a list of commands')
         if error_msg != '':
-            raise BadInputError(error_msg)
+            raise BadInput(error_msg)
 
     #TODO: modify

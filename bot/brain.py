@@ -8,10 +8,22 @@ import shlex
 import sqlite3
 from . import ear
 from . import mouth
-from .action import BadInputError, Messaging
 from .timed_action import TimedAction
 from .members import GroupMember
 from .group_meeting import GroupMeeting
+
+class Messaging(Exception):
+    """ Error "used" to pass messages
+    """
+    def __init__(self, msg):
+        self.msg = msg
+
+class BadInput(Exception):
+    """ Error for bad input by user
+    """
+    def __init__(self, msg, args=tuple()):
+        self.msg = msg
+        self.args = args
 
 class Brain(object):
     """ Brain of bot
@@ -130,11 +142,12 @@ class Brain(object):
         # can only converse with one person per channel
         elif self.conversations[channel][0] != user:
             self.speak(channel,
-                       "I'm sorry, I'm currently talking with <@{0}> at the moment.".format(self.conversations[channel][0]),
+                       "I'm sorry, I'm currently talking with <@{0}> at the moment."
+                       "".format(self.conversations[channel][0]),
                        dm=user)
             return
         # end conversation
-        enders = ['forget', 'reset', 'fuck', 'shut up', 'stop']
+        enders = ['forget', 'reset', 'fuck', 'shut up', 'stop', 'forget', 'bye']
         for ender in enders:
             if ender in command:
                 del self.conversations[channel]
@@ -144,6 +157,7 @@ class Brain(object):
         if 'status' in command:
             self.speak(channel, 'Bleep bloop\n{0}'.format(' '.join(self.conversations[channel][2:])), dm=user)
             return
+        # undo
         if 'undo' in command:
             self.speak(channel, 'Undoing the last input.')
             self.conversations[channel] = self.conversations[channel][:-1]
@@ -158,12 +172,13 @@ class Brain(object):
             action_name = old_conv[0]
         else:
             step1 = self._process_step1(command)
+            # if nothing found
             if not step1[0]:
                 self.speak(channel, step1[1], dm=user)
                 return
             action_name = step1[1]
-            command = command.split(action_name)[1]
             self.conversations[channel] = (user, time, action_name)
+            command = command.split(action_name, 1)[1]
 
         # find option in command
         action = self.actions[action_name]
@@ -172,24 +187,28 @@ class Brain(object):
             option = old_conv[1]
         else:
             step2 = self._process_step2(action, command)
+            # if nothing found
             if not step2[0]:
                 self.speak(channel, step2[1], dm=user)
                 return
             option = step2[1]
-            command = command.split(option)[1]
+            command = command.split(option, 1)[1]
             self.conversations[channel] = (user, time, action_name, option)
 
-        # find inputs
-        inputs = tuple(shlex.split(command))
-        if len(old_conv) >= 3:
-            combined_inputs = old_conv[2:] + inputs
+        # find parameters
+        command = command.strip()
+        parameters = old_conv[2:]
+        if command[0] in ["'", '"'] and command[-1] == command[0]:
+            parameters += tuple(shlex.split(command))
         else:
-            combined_inputs = inputs
-        try: #good inputs
-            action.options[option](*combined_inputs)
+            parameters += (command.strip(),)
+
+        # act
+        try:
+            action.options[option](*parameters)
             self.speak(channel, 'Done!')
             del self.conversations[channel]
-        except BadInputError, e: #bad inputs
+        except BadInput, e:
             message = str(e.msg) # + '\nMake sure you delimit the commands with spaces.'
             self.speak(channel, message)
             self.conversations[channel] = self.conversations[channel][:4] + e.args

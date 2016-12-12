@@ -6,9 +6,10 @@ Takes commands from Slack client and translate them into script
 import re
 from datetime import datetime, date, timedelta
 from random import random
-from . import action
+from .action import Action
+from .brain import BadInput, Messaging
 
-class GroupMeeting(action.Action):
+class GroupMeeting(Action):
     """ Action class for group meeting management
     """
     def __init__(self, db_conn):
@@ -149,7 +150,7 @@ class GroupMeeting(action.Action):
 
     def add(self, date_str='', job='', person=''):
         if not self.is_valid_date(date_str):
-            raise action.BadInputError('What is the date of the presentaton?'
+            raise BadInput('What is the date of the presentaton?'
                                        ' It must be one of "next" or "yyyy-mm-dd".')
 
         # get the data
@@ -167,12 +168,12 @@ class GroupMeeting(action.Action):
             date_obj = datetime.strptime(date_str, '%Y-%m-%d').date()
 
         if job not in ['presenter', 'chair']:
-            raise action.BadInputError('What job would you like me to assign?'
+            raise BadInput('What job would you like me to assign?'
                                        ' It must be one of "presenter" or "chair".',
                                        args=(date_str,))
 
         if person == '':
-            raise action.BadInputError('Who would you like to assign?'
+            raise BadInput('Who would you like to assign?'
                                        ' It should be a name or "random"',
                                        args=(date_str, job, ))
 
@@ -183,24 +184,22 @@ class GroupMeeting(action.Action):
                             (person, )*4)
         matches = self.cursor.fetchall()
         if len(matches) == 0:
-            raise action.BadInputError('I could not find anyone whose id, name,'
+            raise BadInput('I could not find anyone whose id, name,'
                                        ' userid, or slackid is {0}.\n'
                                        'Would you care to try again?'.format(person),
                                        args=(date_str, job,))
         elif len(matches) > 1:
-            raise action.BadInputError('I found more than one person whose id, name,'
+            raise BadInput('I found more than one person whose id, name,'
                                        ' userid, or slackid is {0}.\n'
                                        'Would you care to try again?'.format(person),
                                        args=(date_str, job,))
         else:
             person = matches[0][0]
-        
+
         # Add data
         self.cursor.execute('SELECT * FROM group_meetings WHERE date=?',
                             date_obj.isoformat())
         rows = self.cursor.fetchall()
-        print rows
-        print len(rows)
         if len(rows) == 0:
             self.cursor.execute('INSERT INTO group_meetings (date, {0})'
                                 ' VALUES (?,?)'.format(job),
@@ -211,10 +210,10 @@ class GroupMeeting(action.Action):
                                     (person, rows[0][self.col_ids['id']]))
             else:
                 # FIXME
-                raise action.Messaging('There already is a person assigned.')
+                raise Messaging('There already is a person assigned.')
         else:
             # FIXME
-            raise action.Messaging('There are more than one meetings to assign to.'
+            raise Messaging('There are more than one meetings to assign to.'
                                    " I don't know what to do.")
         self.db_conn.commit()
 
@@ -231,16 +230,16 @@ class GroupMeeting(action.Action):
         """
         for i in identifiers:
             if i.split(':')[0] not in ['presenter', 'chair', 'title', 'date']:
-                raise action.BadInputError('All given options are the identifiers of a particular presentation.'
+                raise BadInput('All given options are the identifiers of a particular presentation.'
                                            ' Each identifier must be one of "presenter", "chair", "title", or "date".'
                                            ' The value of each identifier is delimited by "=".'
                                            ' For example, "presenter:person1 chair:person2"\n')
         where_command, vals, row = self._find_from_identifiers(*identifiers)
         if where_command == '' and row == 0:
-            raise action.BadInputError('I could not find anyone using {0}'.format(identifiers))
+            raise BadInput('I could not find anyone using {0}'.format(identifiers))
         self.cursor.execute('SELECT * FROM group_meetings ORDER BY date DESC {0}'
                             ''.format(where_command))
         rows = self.cursor.fetchall()
         message = '{0:<4}{1:<10}{2:<20}{3:<20}{4:<40}\n'.format('id', 'date', 'presenter', 'chair', 'title')
         message += '\n'.join('{0:<4}{1:<10}{2:<20}{3:<20}{4:<40}'.format(*row) for row in rows)
-        raise action.Messaging(message)
+        raise Messaging(message)
