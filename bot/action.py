@@ -3,6 +3,18 @@
 """
 from abc import ABCMeta, abstractproperty
 
+class Messaging(Exception):
+    """ Error "used" to pass messages
+    """
+    pass
+
+class BadInput(Exception):
+    """ Error for bad input by user
+    """
+    def __init__(self, msg, args=tuple()):
+        super(BadInput, self).__init__(msg)
+        self.args = args
+
 class Action(object):
     """ Abstract class for each functionality in bot
 

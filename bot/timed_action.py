@@ -2,8 +2,7 @@
 
 """
 import time
-from .action import Action
-from .brain import BadInput
+from .action import Action, BadInput
 
 class TimedAction(Action):
     """ Action class for repeating actions

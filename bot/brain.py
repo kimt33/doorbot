@@ -8,22 +8,10 @@ import shlex
 import sqlite3
 from . import ear
 from . import mouth
+from .action import Messaging
 from .timed_action import TimedAction
 from .members import GroupMember
 from .group_meeting import GroupMeeting
-
-class Messaging(Exception):
-    """ Error "used" to pass messages
-    """
-    def __init__(self, msg):
-        self.msg = msg
-
-class BadInput(Exception):
-    """ Error for bad input by user
-    """
-    def __init__(self, msg, args=tuple()):
-        self.msg = msg
-        self.args = args
 
 class Brain(object):
     """ Brain of bot
@@ -49,7 +37,7 @@ class Brain(object):
         self.slack_client = slack_client
         self.db_conn = sqlite3.connect('ayerslab.db')
         self.cursor = self.db_conn.cursor()
-        self.actions = {i.name:i for i in [GroupMeeting(self.db_conn),
+        self.actions = {i.name:i for i in [GroupMeeting(self, self.db_conn),
                                            TimedAction(self),
                                            GroupMember(self.db_conn),]}
         self.timed_actions = {}
@@ -199,7 +187,7 @@ class Brain(object):
         command = command.strip()
         parameters = old_conv[2:]
         if command[0] in ["'", '"'] and command[-1] == command[0]:
-            parameters += tuple(shlex.split(command))
+            parameters += tuple(shlex.split(command[1:-1]))
         else:
             parameters += (command.strip(),)
 
