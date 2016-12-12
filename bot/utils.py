@@ -35,8 +35,6 @@ def where_from_identifiers(*identifiers):
 
     Parameters
     ----------
-    table_name : str
-        Name of the table
     identifiers : list
         List of alternating keys and values
 

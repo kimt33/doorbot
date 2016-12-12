@@ -5,8 +5,7 @@ Takes commands from Slack client and translate them into script
 """
 import re
 from datetime import datetime, date
-from .action import Action
-from .brain import BadInput, Messaging
+from .action import Action, BadInput, Messaging
 from .utils import nice_options, where_from_identifiers
 
 class GroupMember(Action):
@@ -65,7 +64,7 @@ class GroupMember(Action):
         return ['Undergrad', 'Master\'s', 'PhD', 'Postdoc', 'Professor']
 
     def is_valid_role(self, role):
-        """ Checks if given rolid is valid
+        """ Checks if given role is valid
 
         Parameters
         ----------
@@ -76,7 +75,26 @@ class GroupMember(Action):
         True if valid
         False if not
         """
-        return role in (i.lower() for i in self.valid_roles)
+        return role.lower() in (i.lower() for i in self.valid_roles)
+
+    def is_away(self, compressed_dates):
+        """ Checks if a person is away given some set of dates
+
+        Parameters
+        ----------
+        compressed_dates : str
+            Some format of storing dates
+            (yyyy-mm-dd,yyyy-mm-dd)
+        """
+        dates = re.findall(r'\d\d\d\d-\d\d-\d\d', compressed_dates)
+        to_dates = dates[0::2]
+        from_dates = dates[1::2]
+        for to_date, from_date in zip(to_dates, from_dates):
+            to_date = datetime.strptime(to_date, '%Y-%m-%d').date()
+            from_date = datetime.strptime(from_date, '%Y-%m-%d').date()
+            if from_date <= date.today() < to_date:
+                return True
+        return False
 
     def add(self, name='', userid='', slack_id='', email='', role='', is_away='', permission=''):
         """ Adds a member to the database
@@ -149,6 +167,7 @@ class GroupMember(Action):
         to_date : str
             Date in the form yyyy-mm-dd
         identifiers : list
+            List of alternating keys and values
             
         """
         # check from_date
@@ -175,19 +194,20 @@ class GroupMember(Action):
                             " You will be away from {0} to {1}?"
                             " Please try again.".format(from_date, to_date))
         # check identifier
-        if len(identifiers) == 0:
+        if len(identifiers) == 0 or (len(identifiers) % 2 == 1 and
+                                     identifiers[-1] not in self.col_ids.keys()):
             raise BadInput('What can you tell me about this person?'
                            ' You can give me one of {0}.'
                            ''.format(nice_options(self.col_ids.keys())),
-                           args=(str(from_date), str(to_date)))
+                           args=(str(from_date), str(to_date)) + tuple(identifiers[:-1]))
         elif len(identifiers) % 2 == 1:
             raise BadInput('What is the {0} of this person?'
                            ''.format(identifiers[-1]),
                            args=(str(from_date), str(to_date)) + tuple(identifiers))
 
         # get and check where command
-        where_command, vals = where_from_identifiers('group_meetings', *identifiers)
-        self.cursor.execute('SELECT * FROM group_meetings {0} '.format(where_command), vals)
+        where_command, vals = where_from_identifiers(*identifiers)
+        self.cursor.execute('SELECT * FROM members {0} '.format(where_command), vals)
         rows = self.cursor.fetchall()
         if len(rows) == 0:
             messages = ['{0} is {1}' for i in identifiers]
@@ -227,7 +247,7 @@ class GroupMember(Action):
             new_dates.append('({0},{1})'.format(to_date, from_date))
 
         # change database
-        self.cursor.execute('UPDATE members SET dates_away=? id=?'
+        self.cursor.execute('UPDATE members SET dates_away=? WHERE id=?',
                             (','.join(new_dates), rows[0][0]))
         self.db_conn.commit()
 
@@ -256,25 +276,26 @@ class GroupMember(Action):
                            args=(item,))
 
         # check identifier
-        if len(identifiers) == 0:
+        if len(identifiers) == 0 or (len(identifiers) % 2 == 1 and
+                                     identifiers[-1] not in self.col_ids.keys()):
             raise BadInput('What can you tell me about this person?'
                            ' You can give me one of {0}.'
                            ''.format(nice_options(self.col_ids.keys())),
-                           args=(item, to_val))
+                           args=(item, to_val) + tuple(identifiers[:-1]))
         elif len(identifiers) % 2 == 1:
             raise BadInput('What is the {0} of this person?'
                            ''.format(identifiers[-1]),
                            args=(item, to_val) + tuple(identifiers))
 
         where_command, vals = where_from_identifiers(*identifiers)
-        self.cursor.execute('SELECT * FROM group_meetings {0} '.format(where_command), vals)
+        self.cursor.execute('SELECT * FROM members {0} '.format(where_command), vals)
         rows = self.cursor.fetchall()
         if len(rows) == 0:
-            messages = ['{0} is {1}' for i in identifiers]
+            messages = ['{0} is {1}'.format(i, j) for i, j in zip(identifiers, identifiers[1:])]
             raise Messaging('I could not find anyone whose {0}'
                             ''.format(nice_options(messages, 'and')))
         elif len(rows) > 1:
-            messages = ['{0} is {1}' for i in identifiers]
+            messages = ['{0} is {1}'.format(i, j) for i, j in zip(identifiers, identifiers[1:])]
             raise BadInput('There seems to be more than one person whose {0}.'
                            ' Could you tell me more about this person?'
                            ' You can give me one of {1}.'
@@ -318,6 +339,12 @@ class GroupMember(Action):
             # column_identifiers = ['id', 'name', 'userid', 'email', 'role', 'is_away', 'permission']
             column_identifiers = ['id', 'name', 'userid', 'slack_id', 'email',
                                   'role', 'dates_away', 'is_away', 'permission']
+        for i, identifier in enumerate(column_identifiers):
+            if identifier not in self.col_ids.keys() + ['is_away']:
+                raise BadInput('There are no columns named {0}'
+                               ' The columns are named {1}.'
+                               ''.format(identifier, nice_options(self.col_ids.keys())),
+                               args=column_identifiers[:i])
 
         message_format = u''.join(col_formats[i] for i in column_identifiers) + u'\n'
         message = message_format.format(*[col_names[i] for i in column_identifiers])
@@ -327,17 +354,10 @@ class GroupMember(Action):
             for identifier in column_identifiers:
                 # find dates
                 if identifier == 'is_away':
-                    dates = re.findall(r'\d\d\d\d-\d\d-\d\d', row[self.col_ids['dates_away']])
-                    to_dates = dates[0::2]
-                    from_dates = dates[1::2]
-                    is_away = 'no'
-                    for to_date, from_date in zip(to_dates, from_dates):
-                        to_date = datetime.strptime(to_date, '%Y-%m-%d').date()
-                        from_date = datetime.strptime(from_date, '%Y-%m-%d').date()
-                        if from_date <= date.today() < to_date:
-                            is_away = 'yes'
-                            break
-                    row_data.append(is_away)
+                    if self.is_away(row[self.col_ids['dates_away']]):
+                        row_data.append('yes')
+                    else:
+                        row_data.append('no')
                 else:
                     index = self.col_ids[identifier]
                     row_data.append(row[index])
