@@ -168,7 +168,7 @@ class GroupMember(Action):
             Date in the form yyyy-mm-dd
         identifiers : list
             List of alternating keys and values
-            
+
         """
         # check from_date
         if from_date in ['NA', 'N/A']:
