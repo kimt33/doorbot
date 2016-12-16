@@ -27,6 +27,8 @@ def nice_options(options, end_delimiter='or', last_comma=True, quote='`'):
         end_delimiter = ', {0}'.format(end_delimiter)
     if len(options) > 1:
         phrase += '{0} {1}'.format(end_delimiter, options[-1])
+    else:
+        phrase += options[0]
     return phrase
 
 def where_from_identifiers(*identifiers):
