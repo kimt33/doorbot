@@ -18,6 +18,7 @@ class GroupMember(Action):
         db_conn : sqlite3.Connection
             Database object
         """
+        # FIXME: change actor to slack_client
         self.actor = actor
         self.db_conn = db_conn
         self.cursor = self.db_conn.cursor()
