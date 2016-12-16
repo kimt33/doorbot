@@ -10,6 +10,7 @@ from . import ear
 from . import mouth
 from .action import BadInput, Messaging
 from .timed_action import TimedAction
+from .interactive_action import InteractiveAction
 from .members import GroupMember
 from .group_meeting import GroupMeeting
 from .utils import nice_options
@@ -40,11 +41,32 @@ class Brain(object):
         self.cursor = self.db_conn.cursor()
         self.actions = {i.name:i for i in [GroupMember(self, self.db_conn),
                                            TimedAction(self),
+                                           InteractiveAction(self),
                                            GroupMeeting(self.db_conn),]}
+
+        # FIXME: move this to TimedActions
         self.timed_actions = {}
         self.commands = {}
         self.conversations = {}
         self.status_channel = status_channel
+
+    @property
+    def public_channels(self):
+        """ Dictionary of public channels name to id
+        """
+        return {i['name']:i['id'] for i in self.slack_client.api_call("channels.list")['channels']}
+
+    @property
+    def private_channels(self):
+        """ Dictionary of private channels name to id
+        """
+        return {i['name']:i['id'] for i in self.slack_client.api_call("groups.list")['groups']}
+
+    @property
+    def dm_channels(self):
+        """ Dictionary of direct message channels user id to channel id
+        """
+        return {i['user']:i['id'] for i in self.slack_client.api_call("im.list")['ims']}
 
     @property
     def call_name(self):
@@ -127,24 +149,34 @@ class Brain(object):
             True if message is explicitly directed at bot
             False if message is not explicitly directed at bot
         """
-        # FIXME: doesn't work with timed action
-
         time = float(time)
-        # skip commands that are not directed at bot (unless already in conversation)
-        if (not dm and (channel not in self.commands or
-                        self.commands[channel][0] != user)):
-            return
-        # make conversation
-        if (channel not in self.commands or
-                abs(time - self.commands[channel][1]) > 60):
+        # which messages should i skip?
+        if not dm:
+            # if not direct message and I'm not conversing with anyone in the given channel
+            # skip
+            if channel not in self.commands:
+                return
+            # if not direct message and I'm not conversing with the person that messaged
+            # skip
+            if self.commands[channel][0] not in ['', user]:
+                return
+            # NOTE: conversation with user '' means that the conversation is with
+            #       everyone in channel
+        # if direct message and I'm conversing with someone
+        elif channel in self.commands and abs(time - self.commands[channel][1]) <= 60:
+            # if I'm already conversing with someone else, skip
+            if self.commands[channel][0] != user:
+                self.speak(channel,
+                           "I'm sorry, I'm currently talking with <@{0}> at the moment."
+                           "".format(self.commands[channel][0]),
+                           dm=user)
+                return
+        # if direct message and I'm not conversing with anyone
+        else:
+            # start new conversation
             self.commands[channel] = (user, time)
-        # can only converse with one person per channel
-        elif self.commands[channel][0] != user:
-            self.speak(channel,
-                       "I'm sorry, I'm currently talking with <@{0}> at the moment."
-                       "".format(self.commands[channel][0]),
-                       dm=user)
-            return
+        # so I'm currently conversing with someone right now
+
         # end conversation
         enders = ['forget', 'reset', 'fuck', 'shut up', 'stop', 'forget', 'bye']
         for ender in enders:
@@ -258,10 +290,22 @@ class Brain(object):
         ----
         Only supports one level of conversation (bot say, they say, bot say)
         """
+        # initiate conversation (specific to commands)
+        # get reply (from everyone)
+        # check if reply fits
+        # run command using options given (including user info)
+
+        # listen to all messages
+        # find messages with specific keywords (dm and keyword)
+        # find function, option, inputs
+        # if bad input, repeat after asking question
+        # store input at each steps
+
         # if no conversation yet or in some while
         if (channel not in self.conversations or
                 abs(time - self.conversations[channel][1]) > 60):
             self.conversations[channel] = (time, )
+            # self.speak(channel, something)
         # break ice
         if len(self.conversations[channel]) == 1:
             self.speak(channel, kwrds_response[()])
