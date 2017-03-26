@@ -3,6 +3,49 @@
 Responsible for processing commands that are received, and for acting and responding
 appropriately
 
+Actions
+Input:
+    1. from user
+    2. default options
+    3. another action (e.g. timing actions)
+Runs some code
+    1. interface to another module
+    2. manage a database
+    3. prints/replies
+There may be a collection of actions that are linked to one another
+e.g. database management
+Each action depends only on the input from the user
+    Should the action be separated from the user?
+    How do we control the interaction between user and action?
+
+Brain
+Manages interaction with users:
+    1. User must specify all of the correct inputs to run command
+    2. User interactively finds correct inputs to run command.
+    How do we let the user know when they fucked up?
+    How do we carry over the "correct" input?
+Manages interaction between actions:
+    1. Apply actions periodically
+    2. Asks users for input (instead of getting prompted)
+
+Action:
+    does something
+    specific
+    A collection of function should be sufficient
+
+Wrapper:
+    For each action, there should be a wrapper
+        is the input good? how do i get good input?
+    Brain manages user input
+
+
+Wrapper can be generalized. For each input, check if input is good (some set of conditions)
+ respond appropriately if it is not good, and store input if good.
+If all inputs are good, feed into appropriate function
+There is some sort of organization of Actions, so it would be nice if the wrapper
+can be nested (Take first inputs for organization, then inputs for the function)
+
+
 """
 import shlex
 import sqlite3

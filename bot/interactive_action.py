@@ -158,8 +158,7 @@ class InteractiveAction(Action):
             self.actor.speak(channel, ice_breaker)
             # NOTE: kills all conversations that were already happening in these channels
             if channel in self.actor.commmands:
-                self.actor.conversations[channel] = ('', time.time(), 'conversation',
-                                                     'converse')
+                self.actor.conversations[channel] = ('', time.time(), 'conversation', 'converse')
         # process user response
         self.actor.process()
 
