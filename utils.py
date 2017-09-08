@@ -1,5 +1,5 @@
-""" Little tools that prevents me from going crazy
-"""
+"""Little tools that prevents me from going crazy."""
+
 
 def nice_options(options, end_delimiter='or', last_comma=True, quote='`'):
     """ Turns a list of things into syntatically nice english list
@@ -31,6 +31,7 @@ def nice_options(options, end_delimiter='or', last_comma=True, quote='`'):
         phrase += options[0]
     return phrase
 
+
 def where_from_identifiers(*identifiers):
     """ Given a set of identifiers, constructs the WHERE command that retrieves
     that matches the identifiers
@@ -57,3 +58,22 @@ def where_from_identifiers(*identifiers):
         vals = identifiers[1::2]
         where_command += ' '.join('{0}=?'.format(i) for i in keys)
     return where_command, vals
+
+
+def make_errors(actions, speaker):
+    """Add the 'error' and appropriate message each level that does not have the 'error' key."""
+
+    if isinstance(actions, dict):
+        keys = (key for key in actions.keys() if key != 'error')
+
+        def error_speak():
+            """Method for writing the action"""
+            speaker('The last keyword must be one of {0}.'.format(nice_options(keys,
+                                                                               end_delimiter='or',
+                                                                               last_comma=True,
+                                                                               quote='`')))
+
+        actions.setdefault('error', error_speak)
+
+    for inner_actions in actions.values():
+        make_errors(inner_actions, speaker)
