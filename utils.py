@@ -64,7 +64,7 @@ def make_errors(actions, speaker):
     """Add the 'error' and appropriate message each level that does not have the 'error' key."""
 
     if isinstance(actions, dict):
-        keys = (key for key in actions.keys() if key != 'error')
+        keys = [key for key in actions.keys() if key != 'error']
 
         def error_speak():
             """Method for writing the action"""
@@ -75,5 +75,5 @@ def make_errors(actions, speaker):
 
         actions.setdefault('error', error_speak)
 
-    for inner_actions in actions.values():
-        make_errors(inner_actions, speaker)
+        for inner_actions in actions.values():
+            make_errors(inner_actions, speaker)
