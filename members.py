@@ -24,9 +24,10 @@ def add(db_conn, *args):
     except TypeError:
         raise ActionInputError('To add a member to the Ayer\'s lab group member database, you must '
                                'provide the name, (Slack) userid, email, and position of the '
-                               'new member in the given order. Each entry must be delimited from '
-                               'one another with a comma. If you are missing any of these '
-                               'information, just leave the information blank.')
+                               'new member in the given order. The entries are space delimited, '
+                               'which means that you must encase multiword entries within quotes. '
+                               'If you are missing any of these information, just leave the '
+                               'information blank.')
     db_conn.cursor().execute('INSERT INTO members (name, userid, email, role) VALUES (?,?,?,?)',
                              (name, userid, email, role))
     db_conn.commit()
@@ -45,6 +46,11 @@ def modify(db_conn, item, to_val, *identifiers):
         List of alternating keys and values that identify the person.
 
     """
+    if len(identifiers) % 2 != 0:
+        raise ActionInputError('The identifier of the member must alternate between the item type '
+                               'and the item value. For example, to find me, you can write `name '
+                               'slackbot`')
+
     where_command, vals = utils.where_from_identifiers(*identifiers)
     cursor = db_conn.cursor()
     cursor.execute('SELECT * FROM members {0} '.format(where_command), vals)
