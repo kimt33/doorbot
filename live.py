@@ -1,4 +1,5 @@
 import os
+import sqlite3
 import time
 from slackclient import SlackClient
 import action
@@ -12,6 +13,19 @@ slack_client = SlackClient(os.environ.get('SLACK_BOT_TOKEN'))
 
 status_channel = [i['id'] for i in slack_client.api_call("groups.list")['groups']
                   if i['name'] == 'botty_home'][0]
+
+# read in database
+db_conn = sqlite3.connect('ayerslab.db')
+cursor = db_conn.cursor()
+# initiate database
+if u'members' not in (j for i in cursor.fetchall() for j in i):
+    cursor.execute('CREATE TABLE members (id INTEGER PRIMARY KEY, name TEXT, userid TEXT NOT NULL, '
+                   'slack_id TEXT, email TEXT, role TEXT, dates_away TEXT, permission TEXT)')
+    db_conn.commit()
+if u'group_meetings' not in (j for i in cursor.fetchall() for j in i):
+    cursor.execute('CREATE TABLE group_meetings (id INTEGER PRIMARY KEY, date TEXT NOT NULL, '
+                   'presenter INTEGER, chair INTEGER, title TEXT)')
+    db_conn.commit()
 
 if __name__ == "__main__":
     if slack_client.rtm_connect():
@@ -53,9 +67,9 @@ if __name__ == "__main__":
                 # act(args, door_actions)
 
                 # group members
-                # member_actions = {'add': None, 'add_away': None, 'modify': None,
-                #                   'import_from_slack': None}
-                # act(args, member_actions)
+                member_actions = {'add': None, 'add_away': None, 'modify': None,
+                                  'import_from_slack': None}
+                act(args, member_actions)
 
                 # quiet
                 # quiet_actions = {'quiet': None}
