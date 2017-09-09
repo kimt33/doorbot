@@ -5,6 +5,7 @@ import time
 from slackclient import SlackClient
 import action
 import utils
+import door
 
 # starterbot's ID as an environment variable
 BOT_ID = os.environ.get("BOT_ID")
@@ -75,19 +76,27 @@ if __name__ == "__main__":
                         action.act(arguments, actions)
                     except action.ActionInputError as error:
                         speak(error.msg)
+                    except TypeError:
+                        # FIXME: need to handle bad input to function
+                        pass
 
                 # door
                 if args[0] == 'door' or msg['channel'].name == '1door':
                     if args[0] == 'door':
                         args = args[1:]
-                    door_actions = {'open': None, 'add': None, 'modify': None,
+                    door_actions = {'open': lambda: door.open_door(db_conn, msg['user']),
+                                    'add': lambda: door.add(db_conn, msg['user'], *args),
+                                    'modify': lambda: door.change_permission(db_conn, msg['user'],
+                                                                             *args),
                                     'error': lambda: speak("I'm sorry, {0}, but I'm afraid I can't "
                                                            "do that.".format(msg['user']))}
                     act(args, door_actions)
                 # members
                 elif args[0] == 'members':
                     args = args[1:]
-                    member_actions = {'add': None, 'add_away': None, 'modify': None,
+                    member_actions = {'add': None,
+                                      'add_away': None,
+                                      'modify': None,
                                       'import_from_slack': None}
                     act(args, member_actions)
                 # quiet
