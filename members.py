@@ -58,7 +58,7 @@ def modify(db_conn, item, to_val, *identifiers):
     if len(rows) == 0:
         raise ActionInputError('I could not find anyone from those information.')
     elif len(rows) > 1:
-        raise ActionInputError('I found multiple peopl that match those descriptions. '
+        raise ActionInputError('I found multiple people that match those descriptions. '
                                'Could you be more specific?')
     else:
         cursor.execute('UPDATE members SET {0}=? WHERE id=?'.format(item), (to_val, rows[0][0]))
