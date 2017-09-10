@@ -1,7 +1,7 @@
 """Module for wrapping basic actions of the slack bot."""
 
 
-def speak(client, channel, message, user):
+def speak(client, channel, message, user=''):
     """Send message through Slack client.
 
     Parameters
@@ -16,7 +16,8 @@ def speak(client, channel, message, user):
         User to directly message
 
     """
-    message = '<@{0}> {1}'.format(user, message)
+    user = '<@{0}> '.format(user) if user != '' else ''
+    message = '{0}{1}'.format(user, message)
     client.api_call("chat.postMessage", channel=channel, text=message, as_user=True)
 
 

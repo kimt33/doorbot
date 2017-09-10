@@ -7,6 +7,7 @@ import action
 import utils
 import door
 import members
+import quiet
 
 # starterbot's ID as an environment variable
 BOT_ID = os.environ.get("BOT_ID")
@@ -26,6 +27,7 @@ if u'members' not in (j for i in cursor.fetchall() for j in i):
     cursor.execute('CREATE TABLE members (id INTEGER PRIMARY KEY, name TEXT, userid TEXT NOT NULL, '
                    'slack_id TEXT, email TEXT, role TEXT, permission TEXT, door_permission TEXT)')
     db_conn.commit()
+
 cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
 if u'doorlog' not in (j for i in cursor.fetchall() for j in i):
     cursor.execute('''CREATE TABLE doorlog
@@ -33,6 +35,15 @@ if u'doorlog' not in (j for i in cursor.fetchall() for j in i):
         time TEXT NOT NULL,
         userid TEXT NOT NULL)''')
     db_conn.commit()
+
+cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
+if u'quietlog' not in (j for i in cursor.fetchall() for j in i):
+    cursor.execute('''CREATE TABLE quietlog
+    (id INTEGER PRIMARY KEY,
+        time TEXT NOT NULL,
+        userid TEXT NOT NULL)''')
+    db_conn.commit()
+
 cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
 if u'group_meetings' not in (j for i in cursor.fetchall() for j in i):
     cursor.execute('CREATE TABLE group_meetings (id INTEGER PRIMARY KEY, date TEXT NOT NULL, '
@@ -43,6 +54,9 @@ if __name__ == "__main__":
     if slack_client.rtm_connect():
         print("ayerslab_bot connected and running!")
         host = "<@{0}>".format(BOT_ID)
+
+        dict_channels = {i['name']: i['id']
+                         for i in slack_client.api_call("channels.list")['channels']}
         while True:
             raw_info = slack_client.rtm_read()
 
@@ -93,8 +107,6 @@ if __name__ == "__main__":
                     readable_user = cursor.fetchone()[0]
                 except (IndexError, TypeError):
                     readable_user = msg['user']
-                dict_channels = {i['name']: i['id']
-                                 for i in slack_client.api_call("channels.list")['channels']}
 
                 if msg['channel'] == dict_channels['1door'] and args[0] != 'door':
                     args = ['door'] + args
@@ -125,7 +137,8 @@ if __name__ == "__main__":
                                  members.list, db_conn],
                         'import_from_slack': ['', members.import_from_slack, slack_client, db_conn]
                     },
-                    'quiet': ['', None],
+                    'quiet': ['', quiet.shush, slack_client, db_conn, readable_user,
+                              dict_channels['shush']],
                     'print': ['', None],
                     # 'meetings': {
                     # },
