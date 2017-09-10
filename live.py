@@ -28,7 +28,7 @@ if u'members' not in (j for i in cursor.fetchall() for j in i):
     db_conn.commit()
 cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
 if u'door' not in (j for i in cursor.fetchall() for j in i):
-    cursor.execute('CREATE TABLE door (id INTEGER PRIMARY KEY, permission TEXT NOT NULL')
+    cursor.execute('CREATE TABLE door (id INTEGER PRIMARY KEY, permission TEXT NOT NULL)')
     cursor.execute('SELECT id FROM members')
     for i in cursor.fetchall():
         cursor.execute('INSERT INTO door (permission) VALUES (?)', ('admin',))
@@ -60,6 +60,7 @@ if __name__ == "__main__":
                      'message': msg['text'].strip()}
                     for msg in raw_info
                     if msg['type'].startswith('message')
+                    and 'subtype' not in msg  # skip edited messages
                     and msg['user'] != BOT_ID]
 
             # process messages
@@ -95,7 +96,10 @@ if __name__ == "__main__":
                         raise error
 
                 cursor.execute("SELECT userid FROM members WHERE slack_id = ?", (msg['user'],))
-                readable_user = cursor.fetchone()[0]
+                try:
+                    readable_user = cursor.fetchone()[0]
+                except IndexError:
+                    readable_user = msg['user']
                 dict_channels = {i['name']: i['id']
                                  for i in slack_client.api_call("channels.list")['channels']}
 
@@ -122,17 +126,17 @@ if __name__ == "__main__":
                                 'which means that you must encase multiword entries within quotes. '
                                 'If you are missing any of these information, just leave the '
                                 'information blank.',
-                                members.add],
+                                members.add, db_conn],
                         'modify': ["To modify a member's information in the database, you must "
                                    "provide the column that you'd like to modify, the new value, "
                                    "and identifiers of the members (alternating between the column "
                                    "and its value).",
-                                   members.modify],
+                                   members.modify, db_conn],
                         'list': ["To list the members' information in the database, you must "
                                  "provide the idenfiers of the members (alternating between the "
                                  "column and its value).",
-                                 members.list],
-                        'import_from_slack': ['', members.import_from_slack]
+                                 members.list, db_conn],
+                        'import_from_slack': ['', members.import_from_slack, slack_client, db_conn]
                     },
                     'quiet': ['', None],
                     'print': ['', None],

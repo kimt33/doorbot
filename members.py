@@ -70,10 +70,10 @@ def list(db_conn, *column_identifiers):
                  'userid': 'User ID',
                  'slack_id': 'Slack ID',
                  'email': 'Email',
-                 'role': 'Role'}
-    col_formats = {'id': '{: <4}',
+    'role': 'Role'}
+    col_formats = {'id': '{: <12}',
                    'name': '{: <30}',
-                   'userid': '{: <10}',
+                   'userid': '{: <20}',
                    'slack_id': '{: <20}',
                    'email': '{: <40}',
                    'role': '{: <20}'}
@@ -87,16 +87,16 @@ def list(db_conn, *column_identifiers):
     cursor = db_conn.cursor()
 
     if len(column_identifiers) == 0:
-        column_identifiers = {'id', 'name', 'userid', 'slack_id', 'email', 'role'}
+        column_identifiers = ['id', 'name', 'userid', 'slack_id', 'email', 'role']
 
-    diff = set(col_names.keys()).diff(set(column_identifiers))
+    diff = set(col_names.keys()) - set(column_identifiers)
     if len(diff) != 0:
         raise ActionInputError('I could not find any information that goes by {0}'.format(diff))
 
     message_format = u''.join(col_formats[i] for i in column_identifiers) + u'\n'
     message = message_format.format(*[col_names[i] for i in column_identifiers])
 
-    for row in cursor.execute('SELECT * FROM members ORDER BY dates_away'):
+    for row in cursor.execute('SELECT * FROM members'):
         row_data = []
         for identifier in column_identifiers:
             index = col_ids[identifier]
@@ -104,7 +104,7 @@ def list(db_conn, *column_identifiers):
         # construct message
         message += message_format.format(*row_data)
 
-    raise ActionInputError(message)
+    raise ActionInputError('\n' + message)
 
 
 def import_from_slack(slack_client, db_conn):
@@ -119,7 +119,7 @@ def import_from_slack(slack_client, db_conn):
 
     for i in slack_client.api_call('users.list')['members']:
         # check if already in database
-        cursor.execute("SELECT rowid FROM members WHERE userid = ?", (i['name'],))
+        cursor.execute("SELECT rowid FROM members WHERE slack_id = ?", (i['name'],))
         if cursor.fetchone():
             continue
 
@@ -128,7 +128,7 @@ def import_from_slack(slack_client, db_conn):
         slack_ids.append(i['id'])
         emails.append(i['profile'].get('email', ''))
         roles.append('')
-        cursor.executemany('INSERT INTO members (name, userid, slack_id, email, role) '
-                           'VALUES (?,?,?,?,?)',
-                           zip(names, userids, slack_ids, emails, roles))
+    cursor.executemany('INSERT INTO members (name, userid, slack_id, email, role) '
+                       'VALUES (?,?,?,?,?)',
+                       zip(names, userids, slack_ids, emails, roles))
     db_conn.commit()

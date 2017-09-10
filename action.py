@@ -52,8 +52,6 @@ def act(arguments, actions):
         contents = actions[arguments[0]]
         # here, IndexError is raised if arguments is empty
         # then, KeyError is raised if given argument is not a key in actions
-        # NOTE: arguments[1:] will not raise an error if index 1 is out of bounds. it will just
-        #       return and empty array
     except (KeyError, IndexError):
         if 'error' not in actions:
             raise ValueError('The provided set of actions must contain the key `error` to handle '
