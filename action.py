@@ -49,14 +49,35 @@ def act(arguments, actions):
 
     """
     try:
-        actions[arguments[0]](*arguments[1:])
-    # NOTE: arguments[1:] will not raise an error if index 1 is out of bounds. it will just return
-    #       and empty array
-    # NOTE: KeyError will be caught first due to the order of execution.
+        contents = actions[arguments[0]]
+        # here, IndexError is raised if arguments is empty
+        # then, KeyError is raised if given argument is not a key in actions
+        # NOTE: arguments[1:] will not raise an error if index 1 is out of bounds. it will just
+        #       return and empty array
     except (KeyError, IndexError):
         if 'error' not in actions:
             raise ValueError('The provided set of actions must contain the key `error` to handle '
                              'behaviour when bad arguments are provided:\n{0}'.format(actions))
-        actions['error']()
-    except TypeError:
-        act(arguments[1:], actions[arguments[0]])
+        raise ActionInputError(actions['error'])
+
+    if isinstance(contents, (tuple, list)):
+        doc, func, *default_args = contents
+        if not isinstance(doc, str):
+            # FIXME: wording
+            raise ValueError('First entry in the list of actions must be the documentation for '
+                             'executing the function.')
+        elif not hasattr(func, '__call__'):
+            # FIXME: wording
+            raise ValueError('Second entry in the list of actions must be the executed function.')
+        try:
+            func(*default_args, *arguments[1:])
+            # TypeError is raised if wrong number of arguments are provided to the method
+        except TypeError:
+            raise ActionInputError(doc)
+    elif isinstance(contents, str):
+        raise ActionInputError(contents)
+    elif isinstance(contents, dict):
+        act(arguments[1:], contents)
+    else:
+        # FIXME: wording
+        raise ValueError('Cannot understand the given structure of actions.')

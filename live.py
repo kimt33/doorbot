@@ -70,64 +70,46 @@ if __name__ == "__main__":
 
                 # configure act
                 def act(arguments, actions):
-                    """Act according to the message."""
+                    """Act according to the message.
+
+                    Parameters
+                    ----------
+                    arguments : arguments for the
+                    """
                     utils.make_errors(actions, speak)
                     try:
                         action.act(arguments, actions)
                     except action.ActionInputError as error:
                         speak(error.msg)
-                    except TypeError:
-                        # FIXME: need to handle bad input to function
-                        pass
+                    except Exception as error:
+                        speak('DEBUG ME:\n{0}'.format(error.msg))
 
-                # door
-                if args[0] == 'door' or msg['channel'].name == '1door':
-                    if args[0] == 'door':
-                        args = args[1:]
-                    door_actions = {'open': lambda: door.open_door(db_conn, msg['user']),
-                                    'add': lambda: door.add(db_conn, msg['user'], *args),
-                                    'modify': lambda: door.change_permission(db_conn, msg['user'],
-                                                                             *args),
-                                    'error': lambda: speak("I'm sorry, {0}, but I'm afraid I can't "
-                                                           "do that.".format(msg['user']))}
-                    act(args, door_actions)
-                # members
-                elif args[0] == 'members':
-                    args = args[1:]
-                    member_actions = {'add': None,
-                                      'add_away': None,
-                                      'modify': None,
-                                      'import_from_slack': None}
-                    act(args, member_actions)
-                # quiet
-                elif args[0] == 'quiet':
-                    quiet_actions = {'quiet': None}
-                    act(args, quiet_actions)
-                # print
-                elif args[0] == 'print':
-                    args = args[1:]
-                    print_actions = {'print': None}
-                    act(args, print_actions)
-                # meetings
-                elif args[0] == 'meetings':
-                    args = args[1:]
-                    meeting_actions = {}
-                    act(args, meeting_actions)
-                # money
-                elif args[0] == 'money':
-                    args = args[1:]
-                    money_actions = {}
-                    act(args, money_actions)
-                # random draw
-                elif args[0] == 'random':
-                    args = args[1:]
-                    random_actions = {}
-                    act(args, random_actions)
-                # otherwise
-                else:
-                    speak("I don't understand what you want me to do. Please give one of the "
-                          "following keywords: `door`, `members`, `quiet`, `print`, `meetings`, "
-                          "`money`, and `random`.")
+                if msg['channel'].name == '1door' and args[0] != 'door':
+                    args = ['door'] + args
+
+                actions = {
+                    'door': {
+                        'open': ['', door.open_door, db_conn, msg['user']],
+                        'add': ['', door.add, db_conn, msg['user']],
+                        'modify': ['', door.change_permission, db_conn, msg['user']],
+                        'print_db': ['', door.print_db, db_conn, msg['user']],
+                    },
+                    'members': {
+                        'add': ['', None],
+                        'add_away': ['', None],
+                        'modify': ['', None],
+                        'import_from_slack': ['', None]
+                    },
+                    'quiet': ['', None],
+                    'print': ['', None],
+                    'meetings': {
+                    },
+                    'money': {
+                    },
+                    'random': {
+                    },
+                }
+                act(args, actions)
 
             # 1 second delay between reading from firehose
             time.sleep(1)
