@@ -8,6 +8,7 @@ import utils
 import door
 import members
 import quiet
+import file_print
 
 # starterbot's ID as an environment variable
 BOT_ID = os.environ.get("BOT_ID")
@@ -61,17 +62,37 @@ if __name__ == "__main__":
             raw_info = slack_client.rtm_read()
 
             # parse messages (if info is a message that has been directly messaged to bot)
-            msgs = [{'user': msg['user'],
-                     'channel': msg['channel'],
-                     'time': msg['ts'],
-                     'message': msg['text'].strip()}
-                    for msg in raw_info
-                    if msg['type'].startswith('message')
-                    and 'subtype' not in msg  # skip edited messages
-                    and msg['user'] != BOT_ID]
+            def msgs():
+                """Generate messages."""
+                for msg in raw_info:
+                    parsed_msg = {}
+
+                    if not msg['type'].startswith('message'):
+                        continue
+
+                    try:
+                        subtype = msg['subtype']
+                    except KeyError:
+                        if msg['user'] == BOT_ID:
+                            continue
+                        parsed_msg['message'] = msg['text'].strip()
+                    else:
+                        if subtype != 'file_share':
+                            continue
+                        parsed_msg['download'] = msg['file']['url_private_download']
+                        if 'initial_comment' in msg['file']:
+                            parsed_msg['message'] = msg['file']['initial_comment']['comment']
+                        else:
+                            parsed_msg['message'] = ''
+
+                    parsed_msg['user'] = msg['user']
+                    parsed_msg['channel'] = msg['channel']
+                    parsed_msg['time'] = msg['ts']
+                    print(parsed_msg)
+                    yield parsed_msg
 
             # process messages
-            for msg in msgs:
+            for msg in msgs():
                 if msg['message'].startswith(host):
                     args = msg['message'].replace(host, '')
                 else:
@@ -139,6 +160,7 @@ if __name__ == "__main__":
                     },
                     'quiet': ['', quiet.shush, slack_client, db_conn, readable_user,
                               dict_channels['shush']],
+                    'upload': ['', file_print.upload, msg],
                     'print': ['', None],
                     # 'meetings': {
                     # },
