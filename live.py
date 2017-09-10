@@ -24,14 +24,7 @@ cursor = db_conn.cursor()
 cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
 if u'members' not in (j for i in cursor.fetchall() for j in i):
     cursor.execute('CREATE TABLE members (id INTEGER PRIMARY KEY, name TEXT, userid TEXT NOT NULL, '
-                   'slack_id TEXT, email TEXT, role TEXT)')
-    db_conn.commit()
-cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
-if u'door' not in (j for i in cursor.fetchall() for j in i):
-    cursor.execute('CREATE TABLE door (id INTEGER PRIMARY KEY, permission TEXT NOT NULL)')
-    cursor.execute('SELECT id FROM members')
-    for i in cursor.fetchall():
-        cursor.execute('INSERT INTO door (permission) VALUES (?)', ('admin',))
+                   'slack_id TEXT, email TEXT, role TEXT, permission TEXT, door_permission TEXT)')
     db_conn.commit()
 cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
 if u'doorlog' not in (j for i in cursor.fetchall() for j in i):
@@ -98,7 +91,7 @@ if __name__ == "__main__":
                 cursor.execute("SELECT userid FROM members WHERE slack_id = ?", (msg['user'],))
                 try:
                     readable_user = cursor.fetchone()[0]
-                except IndexError:
+                except (IndexError, TypeError):
                     readable_user = msg['user']
                 dict_channels = {i['name']: i['id']
                                  for i in slack_client.api_call("channels.list")['channels']}
@@ -112,29 +105,23 @@ if __name__ == "__main__":
                         'add': ['To add a user to access the door, you must provide an '
                                 'identification of the user, like their name or Slack id.',
                                 door.add, db_conn, readable_user],
-                        'modify': ["To modify a user's permission to open the door, you must "
-                                   "provide the identification of the user whose permission you'd "
-                                   "like to change and the type of permission. The permission can "
-                                   "be one of `yesdoor`, `nodoor`, and `admin`.",
-                                   door.change_permission, db_conn, readable_user],
-                        'print_db': ['', door.print_db, db_conn, readable_user],
                     },
                     'members': {
                         'add': ['To add a member to the Ayer\'s lab group member database, you must'
-                                ' provide the name, (Slack) userid, email, and position of the '
-                                'new member in the given order. The entries are space delimited, '
-                                'which means that you must encase multiword entries within quotes. '
+                                ' provide the name, userid, slack id, email, position of the '
+                                'new member, permission to the bot, and permission to the door in '
+                                'the given order. The entries are space delimited, which means that'
+                                ' you must encase multiword entries within quotes. '
                                 'If you are missing any of these information, just leave the '
-                                'information blank.',
-                                members.add, db_conn],
+                                'information blank, i.e. \'\'.',
+                                members.add, db_conn, readable_user],
                         'modify': ["To modify a member's information in the database, you must "
                                    "provide the column that you'd like to modify, the new value, "
                                    "and identifiers of the members (alternating between the column "
                                    "and its value).",
-                                   members.modify, db_conn],
+                                   members.modify, db_conn, readable_user],
                         'list': ["To list the members' information in the database, you must "
-                                 "provide the idenfiers of the members (alternating between the "
-                                 "column and its value).",
+                                 "provide the columns that you'd like to see.",
                                  members.list, db_conn],
                         'import_from_slack': ['', members.import_from_slack, slack_client, db_conn]
                     },
