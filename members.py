@@ -3,7 +3,7 @@ from action import ActionInputError
 import utils
 
 
-def add(db_conn, *args):
+def add(db_conn, name, userid, slack_id, email, role):
     """Adds a member to the database.
 
     Parameters
@@ -19,15 +19,6 @@ def add(db_conn, *args):
         One of 'Undergrad', "Master's", "Ph.D.", "Postdoc", and "Professor".
 
     """
-    try:
-        name, userid, slack_id, email, role = args
-    except TypeError:
-        raise ActionInputError('To add a member to the Ayer\'s lab group member database, you must '
-                               'provide the name, (Slack) userid, email, and position of the '
-                               'new member in the given order. The entries are space delimited, '
-                               'which means that you must encase multiword entries within quotes. '
-                               'If you are missing any of these information, just leave the '
-                               'information blank.')
     db_conn.cursor().execute('INSERT INTO members (name, userid, email, role) VALUES (?,?,?,?)',
                              (name, userid, email, role))
     db_conn.commit()

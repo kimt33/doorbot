@@ -6,6 +6,7 @@ from slackclient import SlackClient
 import action
 import utils
 import door
+import members
 
 # starterbot's ID as an environment variable
 BOT_ID = os.environ.get("BOT_ID")
@@ -115,10 +116,23 @@ if __name__ == "__main__":
                         'print_db': ['', door.print_db, db_conn, readable_user],
                     },
                     'members': {
-                        'add': ['', None],
-                        'add_away': ['', None],
-                        'modify': ['', None],
-                        'import_from_slack': ['', None]
+                        'add': ['To add a member to the Ayer\'s lab group member database, you must'
+                                ' provide the name, (Slack) userid, email, and position of the '
+                                'new member in the given order. The entries are space delimited, '
+                                'which means that you must encase multiword entries within quotes. '
+                                'If you are missing any of these information, just leave the '
+                                'information blank.',
+                                members.add],
+                        'modify': ["To modify a member's information in the database, you must "
+                                   "provide the column that you'd like to modify, the new value, "
+                                   "and identifiers of the members (alternating between the column "
+                                   "and its value).",
+                                   members.modify],
+                        'list': ["To list the members' information in the database, you must "
+                                 "provide the idenfiers of the members (alternating between the "
+                                 "column and its value).",
+                                 members.list],
+                        'import_from_slack': ['', members.import_from_slack]
                     },
                     'quiet': ['', None],
                     'print': ['', None],
