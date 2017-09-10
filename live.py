@@ -38,11 +38,6 @@ if __name__ == "__main__":
         while True:
             raw_info = slack_client.rtm_read()
 
-            public = {i['id'] for i in slack_client.api_call("channels.list")['channels']
-                      if i['is_member'] == 'true'}
-            private = {i['id'] for i in slack_client.api_call("groups.list")['groups']}
-            ims = {i['id'] for i in slack_client.api_call("im.list")['ims']}
-
             # parse messages (if info is a message that has been directly messaged to bot)
             msgs = [{'user': msg['user'],
                      'channel': msg['channel'],
@@ -50,7 +45,6 @@ if __name__ == "__main__":
                      'message': msg['text'].strip()}
                     for msg in raw_info
                     if msg['type'].startswith('message')
-                    and msg['channel'] in public | private | ims
                     and msg['user'] != BOT_ID]
 
             # process messages
@@ -80,25 +74,31 @@ if __name__ == "__main__":
                     try:
                         action.act(arguments, actions)
                     except action.ActionInputError as error:
-                        speak(error.msg)
+                        speak(str(error))
                     except Exception as error:
-                        speak('DEBUG ME:\n{0}'.format(error.msg))
+                        speak('I ENCOUNTERED AN UNEXPECTED ERROR. DEBUG ME HUMAN!')
+                        raise error
 
-                if msg['channel'].name == '1door' and args[0] != 'door':
+                cursor.execute("SELECT userid FROM members WHERE slack_id = ?", (msg['user'],))
+                readable_user = cursor.fetchone()[0]
+                dict_channels = {i['name']: i['id']
+                                 for i in slack_client.api_call("channels.list")['channels']}
+
+                if msg['channel'] == dict_channels['1door'] and args[0] != 'door':
                     args = ['door'] + args
 
                 actions = {
                     'door': {
-                        'open': ['', door.open_door, db_conn, msg['user']],
+                        'open': ['', door.open_door, db_conn, readable_user],
                         'add': ['To add a user to access the door, you must provide an '
                                 'identification of the user, like their name or Slack id.',
-                                door.add, db_conn, msg['user']],
+                                door.add, db_conn, readable_user],
                         'modify': ["To modify a user's permission to open the door, you must "
                                    "provide the identification of the user whose permission you'd "
                                    "like to change and the type of permission. The permission can "
                                    "be one of `yesdoor`, `nodoor`, and `admin`.",
-                                   door.change_permission, db_conn, msg['user']],
-                        'print_db': ['', door.print_db, db_conn, msg['user']],
+                                   door.change_permission, db_conn, readable_user],
+                        'print_db': ['', door.print_db, db_conn, readable_user],
                     },
                     'members': {
                         'add': ['', None],
@@ -108,12 +108,12 @@ if __name__ == "__main__":
                     },
                     'quiet': ['', None],
                     'print': ['', None],
-                    'meetings': {
-                    },
-                    'money': {
-                    },
-                    'random': {
-                    },
+                    # 'meetings': {
+                    # },
+                    # 'money': {
+                    # },
+                    # 'random': {
+                    # },
                 }
                 act(args, actions)
 
