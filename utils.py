@@ -66,14 +66,10 @@ def make_errors(actions, speaker):
     if isinstance(actions, dict):
         keys = [key for key in actions.keys() if key != 'error']
 
-        def error_speak():
-            """Method for writing the action"""
-            speaker('The last keyword must be one of {0}.'.format(nice_options(keys,
-                                                                               end_delimiter='or',
-                                                                               last_comma=True,
-                                                                               quote='`')))
-
-        actions.setdefault('error', error_speak)
+        actions.setdefault('error',
+                           'The last keyword must be one of {0}.'
+                           ''.format(nice_options(keys, end_delimiter='or', last_comma=True,
+                                                  quote='`')))
 
         for inner_actions in actions.values():
             make_errors(inner_actions, speaker)
