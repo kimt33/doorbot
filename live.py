@@ -26,6 +26,20 @@ if u'members' not in (j for i in cursor.fetchall() for j in i):
                    'slack_id TEXT, email TEXT, role TEXT)')
     db_conn.commit()
 cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
+if u'door' not in (j for i in cursor.fetchall() for j in i):
+    cursor.execute('CREATE TABLE door (id INTEGER PRIMARY KEY, permission TEXT NOT NULL')
+    cursor.execute('SELECT id FROM members')
+    for i in cursor.fetchall():
+        cursor.execute('INSERT INTO door (permission) VALUES (?)', ('admin',))
+    db_conn.commit()
+cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
+if u'doorlog' not in (j for i in cursor.fetchall() for j in i):
+    cursor.execute('''CREATE TABLE doorlog
+    (id INTEGER PRIMARY KEY,
+        time TEXT NOT NULL,
+        userid TEXT NOT NULL)''')
+    db_conn.commit()
+cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
 if u'group_meetings' not in (j for i in cursor.fetchall() for j in i):
     cursor.execute('CREATE TABLE group_meetings (id INTEGER PRIMARY KEY, date TEXT NOT NULL, '
                    'presenter INTEGER, chair INTEGER, title TEXT)')
