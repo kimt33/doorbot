@@ -161,7 +161,18 @@ if __name__ == "__main__":
                     'quiet': ['', quiet.shush, slack_client, db_conn, readable_user,
                               dict_channels['shush']],
                     'upload': ['', file_print.upload, msg],
-                    'print': ['', None],
+                    'print': ["To print a file, you must provide the filename of the file that "
+                              "you've uploaded. Then, you can provided print options in the "
+                              "following order: number of sides, which must be one of `single` or "
+                              "`double` (default is `double`); color, which must be one of `color` "
+                              "or `black` (default is `black`); quality, which must be one of "
+                              "`high` or `economy` (default is `economy`); and page numbers, which "
+                              "uses dashes to include multiple pages in an interval and commas to "
+                              "include separated pages (default is all pages). Since keyword "
+                              "arguments are not supported you must supply all arguments up until "
+                              "desired arugment to modify. For example, to specify print quality, "
+                              "you must provide the number of sides and color.",
+                              file_print.file_print],
                     # 'meetings': {
                     # },
                     # 'money': {
