@@ -90,8 +90,14 @@ if __name__ == "__main__":
                 actions = {
                     'door': {
                         'open': ['', door.open_door, db_conn, msg['user']],
-                        'add': ['', door.add, db_conn, msg['user']],
-                        'modify': ['', door.change_permission, db_conn, msg['user']],
+                        'add': ['To add a user to access the door, you must provide an '
+                                'identification of the user, like their name or Slack id.',
+                                door.add, db_conn, msg['user']],
+                        'modify': ["To modify a user's permission to open the door, you must "
+                                   "provide the identification of the user whose permission you'd "
+                                   "like to change and the type of permission. The permission can "
+                                   "be one of `yesdoor`, `nodoor`, and `admin`.",
+                                   door.change_permission, db_conn, msg['user']],
                         'print_db': ['', door.print_db, db_conn, msg['user']],
                     },
                     'members': {
