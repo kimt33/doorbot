@@ -36,8 +36,6 @@ def has_permission(cursor, user, level='door'):
     level : {'door', 'admin'}
         If 'door', then checks permission to open door.
         If 'admin', then checks permission to administrate door access.
-    halp : bool
-        Flag for writing out the help message.
 
     Raises
     ------
@@ -96,12 +94,18 @@ def change_permission(db_conn, user, user_to_change, permission):
         raise ActionInputError('You do not have the permission.')
 
 
-def add(db_conn, channel, user, user_to_add):
+def add(db_conn, user, user_to_add):
     """Give user permission to open door and add to the database if not already added.
 
     Parameters
     ----------
-    channel : str
+    db_conn : sqlite3.Connection
+        Database connection object.
+    user : str
+        User that wants to change the permission of another user.
+    user_to_add : str
+        User to add to the database.
+
     """
     cursor = db_conn.cursor()
     if has_permission(cursor, user, level='admin'):
